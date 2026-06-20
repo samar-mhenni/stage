@@ -1,0 +1,529 @@
+Domain,TLD,Domain_Length,Has_Numbers,Has_Hyphen,Registrar,Creation_Date,Last_Update_Date,Reputation,Malicious_Votes,Suspicious_Votes,Harmless_Votes,Undetected_Votes,Total_Engines,Threat_Severity,Categories,Popularity_Rank,Last_Analysis_Date,WHOIS_Summary,Data_Source
+urlhaus.abuse.ch,ch,16,No,No,Unknown,Unknown,Unknown,2,0,0,59,32,91,Low,{},Unknown,1777636885.0,DNSSEC:Y,VirusTotal
+bazaar.abuse.ch,ch,15,No,No,Unknown,Unknown,Unknown,6,1,0,58,32,91,Low,{},Unknown,1777636949.0,DNSSEC:Y,VirusTotal
+feodotracker.abuse.ch,ch,21,No,No,Unknown,Unknown,Unknown,1,0,0,59,32,91,Low,{},Unknown,1777627712.0,DNSSEC:Y,VirusTotal
+sslbl.abuse.ch,ch,14,No,No,Unknown,Unknown,Unknown,0,0,0,59,32,91,Low,{},Unknown,1777604552.0,DNSSEC:Y,VirusTotal
+threatfox.abuse.ch,ch,18,No,No,Unknown,Unknown,Unknown,0,0,0,58,33,91,Low,{},Unknown,1777637682.0,DNSSEC:Y,VirusTotal
+spamhaus.org,org,12,No,No,Unknown,938736000.0,1766534400.0,-1,0,0,60,31,91,Low,"{'BitDefender': 'computersandsoftware', 'Sophos': 'information technology', 'Forcepoint ThreatSeeker': 'information technology'}",38402.0,1777637884.0,"Administrative city: REDACTED FOR PRIVACY
+Administrative country: United States
+Administrative email",VirusTotal
+dshield.org,org,11,No,No,"NameCheap, Inc.",963001309.0,1756919098.0,0,0,0,57,34,91,Low,{},473119.0,1777604231.0,"Creation Date: 2000-07-07T20:21:49Z
+DNSSEC: signedDelegation
+Domain Name: dshield.org
+Domain Status:",VirusTotal
+blocklist.de,de,12,No,No,Unknown,Unknown,Unknown,1,0,0,58,33,91,Low,{},292050.0,1777626412.0,"Changed: 2025-11-27T09:32:58+01:00
+Domain: blocklist.de
+Nserver: shubhi.ns.cloudflare.com
+Nserver: t",VirusTotal
+openphish.com,com,13,No,No,Porkbun LLC,1404236104.0,1751250585.0,44,0,0,57,34,91,Low,{},259210.0,1777610905.0,"Creation Date: 2014-07-01T17:35:04Z
+DNSSEC: unsigned
+Domain Name: OPENPHISH.COM
+Domain Status: clien",VirusTotal
+phishtank.org,org,13,No,No,PDR Ltd. d/b/a PublicDomainRegistry.com,1156979981.0,1754896579.0,140,0,0,58,33,91,Low,{},295994.0,1777629930.0,"Creation Date: 2006-08-30T23:19:41Z
+DNSSEC: unsigned
+Domain Name: phishtank.org
+Domain Status: clien",VirusTotal
+stopforumspam.com,com,17,No,No,NAMECHEAP INC,1189354046.0,1723000466.0,0,0,0,58,33,91,Low,{},150122.0,1777572732.0,"Admin City: Reykjavik
+Admin Country: IS
+Admin Email: b97fda9dfe114d0cs@withheldforprivacy.com
+Admin ",VirusTotal
+malware-traffic-analysis.net,net,28,No,Yes,NAMECHEAP INC,1371187992.0,1747297870.0,1,0,0,59,32,91,Low,{},840065.0,1777624127.0,"Admin City: Reykjavik
+Admin Country: IS
+Admin Email: e8d7cc4a3d280f98s@withheldforprivacy.com
+Admin ",VirusTotal
+zeustracker.abuse.ch,ch,20,No,No,Unknown,Unknown,Unknown,0,0,0,56,35,91,Low,{},Unknown,1777466702.0,DNSSEC:Y,VirusTotal
+palevotracker.abuse.ch,ch,22,No,No,Unknown,Unknown,Unknown,0,0,0,56,35,91,Low,{},Unknown,1776153167.0,DNSSEC:Y,VirusTotal
+spyeyetracker.abuse.ch,ch,22,No,No,Unknown,Unknown,Unknown,0,0,0,55,36,91,Low,{},Unknown,1777463864.0,DNSSEC:Y,VirusTotal
+virusshare.com,com,14,No,No,"TUCOWS.COM, CO.",1320793817.0,1758116405.0,1,0,0,58,33,91,Low,{},279767.0,1777605420.0,"Creation Date: 2011-11-08T23:10:17
+Creation Date: 2011-11-08T23:10:17Z
+DNSSEC: unsigned
+Domain Name:",VirusTotal
+malware.lu,lu,10,No,No,Unknown,Unknown,Unknown,0,0,0,57,34,91,Low,{},739403.0,1777542687.0,"domainname: malware.lu
+domaintype: ACTIVE
+nserver: alpha.ns.network.lu
+nserver: ns1.root.lu
+nserver:",VirusTotal
+vxvault.net,net,11,No,No,TLD Registrar Solutions Ltd.,1429343862.0,1775366589.0,2,1,0,56,34,91,Low,"{'Forcepoint ThreatSeeker': 'computer security', 'Xcitium Verdict Cloud': 'information security', 'alphaMountain.ai': 'Information/Computer Security (",190047.0,1777574354.0,"Admin City: Nassau
+Admin Country: BS
+Admin Email: e99be9f20879af39s@vxvault.net.customers.whoispriva",VirusTotal
+malc0de.com,com,11,Yes,No,DREAMHOST,1241737881.0,1741461021.0,-8,0,0,55,36,91,Low,{},520979.0,1777572034.0,"Admin City: Brea
+Admin Country: US
+Admin Email: 116dc785161c19a3s@proxy.dreamhost.com
+Admin Organiza",VirusTotal
+malwaredomains.com,com,18,No,No,NAMECHEAP INC,1195609587.0,1762195679.0,0,0,0,58,33,91,Low,{},529797.0,1777569784.0,"Admin City: Reykjavik
+Admin Country: IS
+Admin Email: 5d1cf7984f7e9394s@withheldforprivacy.com
+Admin ",VirusTotal
+malwareurl.com,com,14,No,No,"Domain.com - Network Solutions, LLC",1241893079.0,1750781988.0,0,0,0,56,35,91,Low,{},686354.0,1777466725.0,"Admin City: Statutory Masking Enabled
+Admin Country: Statutory Masking Enabled
+Admin Email: ec47e7f6",VirusTotal
+malwaredomainlist.com,com,21,No,No,NAMECHEAP INC,1185868472.0,1751360052.0,0,0,0,59,32,91,Low,"{'alphaMountain.ai': 'Information Technology, Information/Computer Security (alphaMountain.ai)'}",228276.0,1777570654.0,"Admin City: Reykjavik
+Admin Country: IS
+Admin Email: d3e06a85c0499b6es@withheldforprivacy.com
+Admin ",VirusTotal
+malwaredatabase.net,net,19,No,No,Unknown,1733011200.0,1764633600.0,0,0,0,57,34,91,Low,{},Unknown,1765041143.0,"Administrative country: Hong Kong
+Create date: 2024-12-01 00:00:00
+Domain name: malwaredatabase.net
+",VirusTotal
+rig-exploit-kit.com,com,19,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1758184238.0,Unknown,VirusTotal
+secrepo.com,com,11,No,No,NAMECHEAP INC,1411266798.0,1755852600.0,0,1,0,57,33,91,Low,{},320222.0,1777626037.0,"Admin City: Reykjavik
+Admin Country: IS
+Admin Email: 5160b11825de7c1fs@withheldforprivacy.com
+Admin ",VirusTotal
+hybrid-analysis.com,com,19,No,Yes,Unknown,1407369600.0,1773273600.0,0,1,0,59,31,91,Low,{},12314.0,1777634801.0,"Create date: 2014-08-07 00:00:00
+Domain name: hybrid-analysis.com
+Domain registrar id: 299.0
+Domain ",VirusTotal
+any.run,run,7,No,No,Unknown,1455321600.0,1764374400.0,17,1,0,59,31,91,Low,{},179834.0,1777637132.0,"Administrative city: REDACTED FOR PRIVACY
+Administrative country: United Arab Emirates
+Administrativ",VirusTotal
+joesandbox.com,com,14,No,No,1API GmbH,1417120363.0,1763865436.0,2,1,0,56,34,91,Low,"{'BitDefender': 'computersandsoftware', 'Sophos': 'information technology', 'Forcepoint ThreatSeeker': 'computer security'}",38163.0,1777572511.0,"Admin City: REDACTED FOR PRIVACY
+Admin Country: REDACTED FOR PRIVACY
+Admin Email: 4babf6fcc6f7794as@",VirusTotal
+app.any.run,run,11,No,No,Unknown,1455321600.0,1764374400.0,6,1,0,58,32,91,Low,{},Unknown,1777634128.0,"Administrative city: REDACTED FOR PRIVACY
+Administrative country: United Arab Emirates
+Administrativ",VirusTotal
+secure-paypal-login.com,com,23,No,Yes,WEBCC,1652787502.0,1684394039.0,1,10,0,48,33,91,Medium,{},Unknown,1776948262.0,"Admin City: Kuala Lumpur
+Admin Country: Malaysia
+Admin Email: c66bf56f763c3198s@whoisprotection.cc
+A",VirusTotal
+paypa1-verify.com,com,17,Yes,Yes,Unknown,Unknown,Unknown,0,0,0,55,36,91,Low,{},Unknown,1777102827.0,Unknown,VirusTotal
+micros0ft-support.com,com,21,Yes,Yes,Unknown,1747180800.0,1747180800.0,0,0,0,53,38,91,Low,{},Unknown,1775120572.0,"Create date: 2025-05-14 00:00:00
+Domain name: micros0ft-support.com
+Domain registrar id: 146
+Domain ",VirusTotal
+g00gle-verify.com,com,17,Yes,Yes,Unknown,1691712000.0,1691712000.0,0,0,0,54,37,91,Low,{},Unknown,1776105551.0,"Create date: 2023-08-11 00:00:00
+Domain name: g00gle-verify.com
+Domain registrar id: 895
+Domain regi",VirusTotal
+amazon-account-verify.com,com,25,No,Yes,Unknown,1620604800.0,1620604800.0,0,2,0,52,37,91,Low,{},Unknown,1776930192.0,"Administrative city: Seattle
+Administrative country: United States
+Administrative email: e9ff7690a60",VirusTotal
+netflix-billing-update.net,net,26,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1749728695.0,Unknown,VirusTotal
+linkedin-verify.com,com,19,No,Yes,Unknown,1748304000.0,1748304000.0,0,2,0,52,37,91,Low,{'Webroot': 'Phishing and Other Frauds'},Unknown,1777093506.0,"Administrative city: REDACTED FOR PRIVACY
+Administrative country: REDACTED FOR PRIVACY
+Administrativ",VirusTotal
+instagram-login-secure.com,com,26,No,Yes,"NAMESILO, LLC",1495670400.0,1499817600.0,0,0,0,0,91,91,Low,{},Unknown,1562865140.0,"Domain Name: INSTAGRAM-LOGIN-SECURE.COM
+Registrar: NAMESILO, LLC
+Sponsoring Registrar IANA ID: 1479
+",VirusTotal
+whatsapp-verify.net,net,19,No,Yes,Unknown,1775088000.0,1775088000.0,0,0,3,54,34,91,Low,"{'alphaMountain.ai': 'Suspicious, Newly Registered (alphaMountain.ai)'}",Unknown,1775653371.0,"Administrative country: Cambodia
+Create date: 2026-04-02 00:00:00
+Domain name: whatsapp-verify.net
+D",VirusTotal
+telegram-secure.org,org,19,No,Yes,Unknown,1744070400.0,1744070400.0,0,0,0,56,35,91,Low,{},Unknown,1777132786.0,"Create date: 2025-04-08 00:00:00
+Domain name: telegram-secure.org
+Domain registrar id: 1479
+Domain r",VirusTotal
+chase-verify-account.com,com,24,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1776331194.0,Unknown,VirusTotal
+wellsfargo-update.net,net,21,No,Yes,Unknown,Unknown,Unknown,0,0,0,54,37,91,Low,{},Unknown,1774198820.0,Unknown,VirusTotal
+hsbc-secure-login.com,com,21,No,Yes,Unknown,Unknown,Unknown,0,0,0,55,36,91,Low,{},Unknown,1771438615.0,Unknown,VirusTotal
+halifax-online-secure.com,com,25,No,Yes,NAMECHEAP INC,1604680740.0,1639885038.0,0,1,1,52,37,91,Low,"{'alphaMountain.ai': 'Adult/Mature, Suspicious (alphaMountain.ai)'}",Unknown,1774702674.0,"Admin City: Reykjavik
+Admin Country: IS
+Admin Email: c9d73ef50d9e1dcbs@mail.withheldforprivacy.com
+A",VirusTotal
+bankofamerica-secure.net,net,24,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1777633108.0,Unknown,VirusTotal
+citibank-login.org,org,18,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1777633161.0,Unknown,VirusTotal
+barclays-verify.net,net,19,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1777633194.0,Unknown,VirusTotal
+lloyds-bank-secure.org,org,22,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1777633214.0,Unknown,VirusTotal
+natwest-verify-account.net,net,26,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1777633248.0,Unknown,VirusTotal
+santander-login.org,org,19,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1777633280.0,Unknown,VirusTotal
+apple-id-secure.net,net,19,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1777633330.0,Unknown,VirusTotal
+dropbox-secure.org,org,18,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1777633376.0,Unknown,VirusTotal
+twitter-secure-login.net,net,24,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1777633405.0,Unknown,VirusTotal
+facebook-verify-account.org,org,27,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1777633428.0,Unknown,VirusTotal
+clop-ransomware.com,com,19,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1773285532.0,Unknown,VirusTotal
+update-service.net,net,18,No,Yes,Unknown,1770249600.0,1770249600.0,-2,17,0,44,30,91,High,{},Unknown,1776941991.0,"Administrative city: Sanford
+Administrative country: United States
+Administrative state: NC
+Billing ",VirusTotal
+system-check.net,net,16,No,Yes,"Netowl, Inc.",1687331567.0,1716352211.0,0,0,0,56,35,91,Low,{},Unknown,1775459355.0,"Creation Date: 2023-06-21T07:12:47Z
+DNSSEC: unsigned
+Domain Name: SYSTEM-CHECK.NET
+Domain Status: cl",VirusTotal
+security-scan.org,org,17,No,Yes,Unknown,1613001600.0,1770768000.0,0,0,0,56,35,91,Low,{},Unknown,1777094119.0,"Administrative city: Reykjavik
+Administrative country: Iceland
+Administrative email: a5ee56fe23a679f",VirusTotal
+analytics-cdn.org,org,17,No,Yes,Unknown,1758499200.0,1758499200.0,0,0,0,54,37,91,Low,{},Unknown,1766205913.0,"Create date: 2025-09-22 00:00:00
+Domain name: analytics-cdn.org
+Domain registrar id: 1068
+Domain reg",VirusTotal
+data-sync.io,io,12,No,Yes,Unknown,1738800000.0,1738800000.0,0,0,0,55,36,91,Low,{},Unknown,1772965530.0,"Administrative city: REDACTED FOR PRIVACY
+Administrative country: REDACTED FOR PRIVACY
+Administrativ",VirusTotal
+api-gateway.xyz,xyz,15,No,Yes,Unknown,1680048000.0,1680048000.0,0,0,0,57,34,91,Low,{},Unknown,1777047429.0,"Create date: 2023-03-29 00:00:00
+Domain name: api-gateway.xyz
+Domain registrar id: 1606
+Domain regis",VirusTotal
+nigerian-prince.net,net,19,No,Yes,"FastDomain, Inc.",1527606011.0,1527607050.0,0,0,0,0,91,91,Low,{},Unknown,Unknown,"Domain Name: NIGERIAN-PRINCE.NET
+Registry Domain ID: 2269101630_DOMAIN_NET-VRSN
+Registrar WHOIS Serv",VirusTotal
+crypto-doubler.net,net,18,No,Yes,Unknown,1617667200.0,1617667200.0,0,0,0,46,45,91,Low,{},Unknown,1630145458.0,"Administrative city: Scottsdale
+Administrative country: United States
+Administrative email: 9049e0e9",VirusTotal
+bitcoin-generator.org,org,21,No,Yes,Unknown,1760572800.0,1760572800.0,0,0,1,55,35,91,Low,"{'alphaMountain.ai': 'Scam/Illegal/Unethical, Suspicious (alphaMountain.ai)'}",670642.0,1775716777.0,"Create date: 2025-10-16 00:00:00
+Domain name: bitcoin-generator.org
+Domain registrar id: 1636
+Domain",VirusTotal
+free-crypto.com,com,15,No,Yes,Epik Holdings Inc,1545419870.0,1632904081.0,0,0,0,48,43,91,Low,{},684822.0,1760148471.0,"Admin City: Bellevue
+Admin Country: US
+Admin Email: f97797800dc771bas@anonymize.com
+Admin Organizati",VirusTotal
+forex-profit.org,org,16,No,Yes,"Wild West Domains, LLC",1412678630.0,1539945768.0,0,0,0,0,91,91,Low,{},Unknown,1542458190.0,"Domain Name: FOREX-PROFIT.ORG
+Registry Domain ID: D174149193-LROR
+Registrar WHOIS Server: whois.goda",VirusTotal
+darkweb-market.onion.ly,ly,23,No,Yes,Libyan Spider Network (int),1760852295.0,1761292808.0,0,0,0,0,91,91,Low,{},Unknown,1777534522.0,"Creation Date: 2025-10-19T05:38:15Z
+DNSSEC: unsigned
+Domain Name: onion.ly
+Domain Status: active htt",VirusTotal
+hidden-service.net,net,18,No,Yes,"Amazon Registrar, Inc.",1586715922.0,1741481039.0,0,0,0,0,91,91,Low,{},Unknown,1773724804.0,"Creation Date: 2020-04-12T18:25:22Z
+DNSSEC: unsigned
+Domain Name: HIDDEN-SERVICE.NET
+Domain Name: hi",VirusTotal
+tor-exit.org,org,12,No,Yes,Unknown,1673568000.0,1673568000.0,0,0,0,0,91,91,Low,{},Unknown,1673857187.0,"Administrative city: REDACTED FOR PRIVACY
+Administrative country: REDACTED FOR PRIVACY
+Administrativ",VirusTotal
+darknet-shop.com,com,16,No,Yes,Unknown,1703203200.0,1703203200.0,0,0,0,56,35,91,Low,{},Unknown,1735594023.0,"Administrative city: REDACTED FOR PRIVACY
+Administrative country: REDACTED FOR PRIVACY
+Administrativ",VirusTotal
+onion-market.net,net,16,No,Yes,Unknown,1659744000.0,1659744000.0,0,0,0,57,34,91,Low,{'Xcitium Verdict Cloud': 'media sharing'},Unknown,1686883022.0,"Create date: 2022-08-06
+Domain name: onion-market.net
+Domain registrar id: 3765
+Expiry date: 2023-08",VirusTotal
+dark-market.org,org,15,No,Yes,Unknown,1736985600.0,1738281600.0,0,0,0,0,91,91,Low,{},Unknown,1742034943.0,"Create date: 2025-01-16 00:00:00
+Domain name: dark-market.org
+Domain registrar id: 625
+Domain regist",VirusTotal
+black-market-online.com,com,23,No,Yes,OVH sas,1592843570.0,1592843954.0,0,0,0,0,91,91,Low,{},Unknown,1592953366.0,"Admin City: REDACTED FOR PRIVACY
+Admin Country: REDACTED FOR PRIVACY
+Admin Email: 30b4845e3a32258ds@",VirusTotal
+underground-shop.net,net,20,No,Yes,"ASCIO TECHNOLOGIES, INC. DANMARK - FILIAL AF ASCIO TECHNOLOGIES, INC. USA",1440892800.0,1440892800.0,0,0,0,0,91,91,Low,{},Unknown,Unknown,"Domain Name: UNDERGROUND-SHOP.NET
+Registrar: ASCIO TECHNOLOGIES, INC. DANMARK - FILIAL AF ASCIO TECH",VirusTotal
+coinhive.com,com,12,No,No,1API GmbH,1354374519.0,1763875447.0,-47,13,1,45,32,91,High,{},492944.0,1777639416.0,"Admin City: REDACTED FOR PRIVACY
+Admin Country: REDACTED FOR PRIVACY
+Admin Email: 4babf6fcc6f7794as@",VirusTotal
+cryptoloot.pro,pro,14,No,No,Unknown,1770768000.0,1770768000.0,0,17,0,41,33,91,High,{},Unknown,1777637306.0,"Create date: 2026-02-11 00:00:00
+Domain name: cryptoloot.pro
+Domain registrar id: 472.0
+Domain regis",VirusTotal
+minero.cc,cc,9,No,No,Key-Systems GmbH,1499227457.0,1769746814.0,0,13,2,46,30,91,High,"{'BitDefender': 'adsnetwork', 'Dr.Web': 'known infection source', 'Sophos': 'spyware and malware', 'Webroot': 'Malware Sites', 'Forcepoint ThreatSeeke",362931.0,1777475876.0,"Admin City: Alexandria
+Admin Country: US
+Admin Email: ef6faa1357d00abcs@minero.cc.whoisproxy.org
+Adm",VirusTotal
+coin-have.com,com,13,No,Yes,Unknown,1765584000.0,1770681600.0,-1,17,0,43,31,91,High,{},564115.0,1777637333.0,"Administrative city: Redacted for privacy
+Administrative country: United States
+Administrative state",VirusTotal
+crypto-mine.org,org,15,No,Yes,"Name.com, Inc.",1663741732.0,1697467963.0,0,0,0,48,43,91,Low,{},Unknown,1698431858.0,"Admin City: REDACTED FOR PRIVACY
+Admin Country: REDACTED FOR PRIVACY
+Admin Organization: REDACTED FO",VirusTotal
+monero-miner.net,net,16,No,Yes,"Gransy, s.r.o.",1686670444.0,1769965322.0,0,11,1,46,33,91,High,"{'BitDefender': 'adsnetwork', 'Forcepoint ThreatSeeker': 'potentially unwanted software', 'Sophos': 'phishing and fraud', 'Webroot': 'Phishing and Oth",749664.0,1777247184.0,"Creation Date: 2023-06-13T15:34:04Z
+DNSSEC: unsigned
+Domain Name: MONERO-MINER.NET
+Domain Status: ok",VirusTotal
+xmr-pool.com,com,12,No,Yes,"Wild West Domains, LLC",1636736904.0,1763059611.0,0,1,1,54,35,91,Low,{},590580.0,1777485982.0,"Creation Date: 2021-11-12T17:08:24Z
+DNSSEC: unsigned
+Domain Name: XMR-POOL.COM
+Domain Status: client",VirusTotal
+bulk-mailer.net,net,15,No,Yes,"GODADDY.COM, LLC",1456704000.0,1456704000.0,0,0,0,0,91,91,Low,{},Unknown,1774328739.0,"Domain Name: BULK-MAILER.NET
+Registrar: GODADDY.COM, LLC
+Sponsoring Registrar IANA ID: 146
+Whois Ser",VirusTotal
+email-blaster.com,com,17,No,Yes,"GoDaddy.com, LLC",1751734475.0,1751734475.0,0,0,0,53,38,91,Low,{},Unknown,1775091551.0,"Creation Date: 2025-07-05T16:54:35Z
+DNSSEC: unsigned
+Domain Name: EMAIL-BLASTER.COM
+Domain Status: c",VirusTotal
+mass-mailer.net,net,15,No,Yes,Namebay,1504206902.0,1660604859.0,0,0,0,58,33,91,Low,{},Unknown,1663375824.0,"Admin City: REDACTED FOR PRIVACY
+Admin Country: REDACTED FOR PRIVACY
+Admin Organization: REDACTED FO",VirusTotal
+bulk-email-service.com,com,22,No,Yes,Unknown,1574812800.0,1574812800.0,0,0,0,0,91,91,Low,{'BitDefender': 'computersandsoftware'},Unknown,1607091569.0,"Create date: 2019-11-27
+Domain name: bulk-email-service.com
+Domain registrar id: 440
+Domain registra",VirusTotal
+threatcrowd.org,org,15,No,No,Unknown,1425686400.0,1769817600.0,0,0,0,59,32,91,Low,{'alphaMountain.ai': 'Information/Computer Security (alphaMountain.ai)'},775701.0,1777572346.0,"Billing city: Hayes
+Billing country: United Kingdom
+Billing state: Middlesex
+Create date: 2015-03-07",VirusTotal
+alienvault.com,com,14,No,No,Unknown,1105660800.0,1768435200.0,7,0,0,57,34,91,Low,{},103091.0,1777627703.0,"Billing city: Tempe
+Billing country: United States
+Billing state: Arizona
+Create date: 2005-01-14 00",VirusTotal
+greynoise.io,io,12,No,No,Key-Systems GmbH,1505757028.0,1769879132.0,0,0,0,59,32,91,Low,{},551010.0,1777610177.0,"Admin City: REDACTED
+Admin Country: REDACTED
+Admin Organization: REDACTED
+Admin Postal Code: REDACTE",VirusTotal
+shodan.io,io,9,No,No,GANDI SAS,1345604574.0,1761441337.0,3,0,0,60,31,91,Low,{},10581.0,1777639709.0,"Admin City: Paris
+Admin City: REDACTED
+Admin Country: FR
+Admin Country: REDACTED
+Admin Email: 2ed6f8",VirusTotal
+censys.io,io,9,No,No,Porkbun LLC,1439495444.0,1765422290.0,9,0,0,59,32,91,Low,{},15334.0,1777634130.0,"Admin City: REDACTED
+Admin Country: REDACTED
+Admin Organization: REDACTED
+Admin Postal Code: REDACTE",VirusTotal
+binaryedge.io,io,13,No,No,"Cloudflare, Inc",1418242208.0,1763179445.0,-1,0,0,57,34,91,Low,"{'alphaMountain.ai': 'Business/Economy, Information Technology (alphaMountain.ai)', 'BitDefender': 'business', 'Sophos': 'general business', 'Forcepoi",383794.0,1777610607.0,"Admin City: REDACTED
+Admin Country: REDACTED
+Admin Organization: REDACTED
+Admin Postal Code: REDACTE",VirusTotal
+pulsedive.com,com,13,No,No,Squarespace Domains II LLC,1478899099.0,1761602794.0,1,0,0,59,32,91,Low,{},634914.0,1777635977.0,"Creation Date: 2016-11-11T21:18:19Z
+DNSSEC: unsigned
+Domain Name: PULSEDIVE.COM
+Domain Name: pulsedi",VirusTotal
+intelx.io,io,9,No,No,Dynadot Inc,1515454893.0,1669595950.0,0,0,0,59,32,91,Low,{},124855.0,1777639709.0,"Admin City: REDACTED
+Admin Country: REDACTED
+Admin Organization: REDACTED
+Admin Postal Code: REDACTE",VirusTotal
+onyphe.io,io,9,No,No,OVH SAS,1500967991.0,1757316850.0,0,0,0,57,34,91,Low,{},279100.0,1777571009.0,"Admin City: REDACTED
+Admin Country: REDACTED
+Admin Organization: REDACTED
+Admin Postal Code: REDACTE",VirusTotal
+zoomeye.org,org,11,No,No,"Alibaba Cloud Computing (Beijing) Co., Ltd.",1371711420.0,1672111470.0,0,0,0,58,33,91,Low,{},72427.0,1777591939.0,"Creation Date: 2013-06-20T06:57:00Z
+DNSSEC: unsigned
+Domain Name: zoomeye.org
+Domain Status: ok http",VirusTotal
+fofa.info,info,9,No,No,Unknown,1612224000.0,1771977600.0,0,0,0,57,34,91,Low,{},9983.0,1777635977.0,"Administrative country: China
+Administrative state: æ¹–å—çœ
+Billing country: China
+Billing state: ",VirusTotal
+leakix.net,net,10,No,No,Unknown,1592006400.0,1773100800.0,-7,0,1,57,33,91,Low,{},356134.0,1777636220.0,"Create date: 2020-06-13 00:00:00
+Domain name: leakix.net
+Domain registrar id: 1387.0
+Domain registra",VirusTotal
+rutracker.org,org,13,No,No,Internet Domain Service BS Corp,1266438881.0,1763646357.0,3,0,0,57,34,91,Low,{},511.0,1777639686.0,"Creation Date: 2010-02-17T20:34:41Z
+DNSSEC: unsigned
+Domain Name: rutracker.org
+Domain Status: clien",VirusTotal
+thepiratebay.org,org,16,No,No,easyDNS Technologies Inc.,1088438907.0,1743909630.0,5,1,1,58,31,91,Low,{},2847.0,1777638909.0,"Creation Date: 2004-06-28T16:08:27
+Creation Date: 2004-06-28T16:08:27Z
+DNSSEC: unsigned
+Domain Name:",VirusTotal
+1337x.to,to,8,Yes,No,Government of Kingdom of Tonga,1667346968.0,1681857631.0,3,1,1,57,32,91,Low,{},274.0,1777638275.0,"Creation Date: 2022-11-01T23:56:08.000Z
+DNSSEC: unsigned
+Domain Name: 1337x.to
+Domain Status: ok htt",VirusTotal
+kickasstorrents.to,to,18,No,No,Government of Kingdom of Tonga,1417401501.0,1721573270.0,0,0,0,57,34,91,Low,{},7531.0,1777635391.0,"Creation Date: 2014-12-01T02:38:21.000Z
+DNSSEC: unsigned
+Domain Name: kickasstorrents.to
+Domain Stat",VirusTotal
+rarbg.to,to,8,No,No,Unknown,1715472000.0,1715472000.0,0,2,1,57,31,91,Low,{},2018.0,1777579490.0,"Create date: 2024-05-12 00:00:00
+Domain name: rarbg.to
+Expiry date: 2080-10-21 00:00:00
+Query time: ",VirusTotal
+yts.mx,mx,6,No,No,Tucows.com Co.,Unknown,Unknown,2,4,1,53,33,91,Medium,{},214.0,1777623954.0,"City: Toronto
+Country: Canada
+DNS: eric.ns.cloudflare.com
+DNS: erin.ns.cloudflare.com
+Domain Name: y",VirusTotal
+fmovies.io,io,10,No,No,NAMECHEAP INC,1467704699.0,1724053524.0,0,1,1,55,34,91,Low,"{'BitDefender': 'entertainment', 'Forcepoint ThreatSeeker': 'hacking', 'Sophos': 'entertainment', 'Xcitium Verdict Cloud': 'streaming media', 'alphaMo",860153.0,1775670444.0,"Admin City: REDACTED FOR PRIVACY
+Admin City: Reykjavik
+Admin Country: IS
+Admin Country: REDACTED FOR",VirusTotal
+123movies.la,la,12,Yes,No,MarkMonitor Inc.,1504346181.0,1763654982.0,0,1,1,55,34,91,Low,{},824437.0,1777586017.0,"Creation Date: 2017-09-02T09:56:21.0Z
+DNSSEC: unsigned
+Domain Name: 123MOVIES.LA
+Domain Status: clie",VirusTotal
+putlocker.vip,vip,13,No,No,NAMECHEAP INC,1534741366.0,1760723309.0,0,1,1,57,32,91,Low,{},42328.0,1777613661.0,"Admin City: Reykjavik
+Admin Country: IS
+Admin Email: 73ebea5e08272e06s@withheldforprivacy.com
+Admin ",VirusTotal
+solarmovie.one,one,14,No,No,Unknown,1509580800.0,1765756800.0,0,1,1,56,33,91,Low,"{'BitDefender': 'misc', 'Forcepoint ThreatSeeker': 'business and economy', 'alphaMountain.ai': 'Piracy/Plagiarism, Scam/Illegal/Unethical, Video/Multi",80111.0,1777573812.0,"Create date: 2017-11-02 00:00:00
+Domain name: solarmovie.one
+Domain registrar id: 1479.0
+Domain regi",VirusTotal
+streamlord.com,com,14,No,No,"Gransy, s.r.o.",1407163997.0,1754296742.0,0,0,1,56,34,91,Low,{},53438.0,1777563830.0,"Creation Date: 2014-08-04T14:53:17Z
+DNSSEC: unsigned
+Domain Name: STREAMLORD.COM
+Domain Status: ok h",VirusTotal
+watchseries.live,live,16,No,No,Unknown,1762041600.0,1762128000.0,0,0,0,56,35,91,Low,{},522127.0,1776317338.0,"Create date: 2025-11-02 00:00:00
+Domain name: watchseries.live
+Domain registrar id: 418
+Expiry date:",VirusTotal
+superfish.com,com,13,No,No,Unknown,1129420800.0,1771459200.0,0,9,2,51,29,91,Medium,{},414509.0,1777611083.0,"Create date: 2005-10-16 00:00:00
+Domain name: superfish.com
+Domain registrar id: 146.0
+Domain regist",VirusTotal
+conduit.com,com,11,No,No,NAMECHEAP INC,798350400.0,1581844710.0,-2,0,0,61,30,91,Low,"{'BitDefender': 'adsnetwork', 'Dr.Web': 'not recommended site', 'Sophos': 'information technology', 'Forcepoint ThreatSeeker': 'information technology",13342.0,1777639428.0,"Admin City: Reykjavik
+Admin Country: IS
+Admin Email: f927af2d6a6e0629s@withheldforprivacy.com
+Admin ",VirusTotal
+babylon.com,com,11,No,No,"GoDaddy.com, LLC",901944000.0,1773572405.0,0,1,0,61,29,91,Low,{},28648.0,1777639505.0,"Creation Date: 1998-08-01T04:00:00Z
+DNSSEC: unsigned
+Domain Name: BABYLON.COM
+Domain Status: clientD",VirusTotal
+ask.com,com,7,No,No,MarkMonitor Inc.,908856000.0,1726563822.0,0,0,0,60,31,91,Low,{},1246.0,1777639820.0,"Creation Date: 1998-10-20T04:00:00+0000
+Creation Date: 1998-10-20T04:00:00Z
+DNSSEC: unsigned
+Domain ",VirusTotal
+snap.do,do,7,No,No,Registrar NIC .DO (midominio.do),1737792519.0,1766507095.0,0,9,1,49,32,91,Medium,"{'BitDefender': 'blogs', 'Dr.Web': 'known infection source', 'Sophos': 'information technology', 'Forcepoint ThreatSeeker': 'search engines and portal",315798.0,1777638329.0,"Admin City: Redacted | Registry Policy
+Admin Country: Redacted | Registry Policy
+Admin Organization:",VirusTotal
+delta-homes.com,com,15,No,Yes,"Alibaba Cloud Computing (Beijing) Co., Ltd.",1372835149.0,1750295776.0,0,2,0,58,31,91,Low,"{'BitDefender': 'searchengines', 'Dr.Web': 'not recommended site', 'Forcepoint ThreatSeeker': 'search engines and portals'}",367031.0,1777498972.0,"Creation Date: 2013-07-03T07:05:49Z
+DNSSEC: unsigned
+Domain Name: DELTA-HOMES.COM
+Domain Name: delta",VirusTotal
+mysearchdial.com,com,16,No,No,"GoDaddy.com, LLC",1363971918.0,1774262907.0,0,2,1,56,32,91,Low,"{'BitDefender': 'searchengines', 'Sophos': 'information technology', 'Webroot': 'Spyware and Adware', 'Forcepoint ThreatSeeker': 'search engines and p",634306.0,1777495367.0,"Creation Date: 2013-03-22T17:05:18Z
+DNSSEC: unsigned
+Domain Name: MYSEARCHDIAL.COM
+Domain Status: cl",VirusTotal
+sweet-page.com,com,14,No,Yes,"Alibaba Cloud Computing (Beijing) Co., Ltd.",1388642300.0,1766106923.0,-41,2,1,56,32,91,Low,{},50645.0,1776593159.0,"Creation Date: 2014-01-02T05:58:20Z
+DNSSEC: unsigned
+Domain Name: SWEET-PAGE.COM
+Domain Name: sweet-",VirusTotal
+taplika.com,com,11,No,No,Dynadot Inc,1628015021.0,1729371363.0,0,5,1,51,34,91,Medium,{},654255.0,1775241414.0,"Creation Date: 2021-08-03T18:23:41Z
+DNSSEC: unsigned
+Domain Name: TAPLIKA.COM
+Domain Status: clientT",VirusTotal
+update-java.net,net,15,No,Yes,"GMO INTERNET, INC. DBA ONAMAE.COM",1479081600.0,1479081600.0,0,13,0,45,33,91,High,{},Unknown,1776071267.0,"Domain Name: UPDATE-JAVA.NET
+Registrar: GMO INTERNET, INC. DBA ONAMAE.COM
+Sponsoring Registrar IANA ",VirusTotal
+flash-player.info,info,17,No,Yes,Unknown,1663372800.0,1663372800.0,0,0,0,58,33,91,Low,{},Unknown,1698000887.0,"Administrative city: REDACTED FOR PRIVACY
+Administrative country: Romania
+Create date: 2022-09-17 00",VirusTotal
+microsoft-alert.com,com,19,No,Yes,OVH sas,1626097824.0,1752391078.0,0,5,0,54,32,91,Medium,"{'BitDefender': 'parked', 'alphaMountain.ai': 'Suspicious (alphaMountain.ai)'}",Unknown,1776658580.0,"Admin City: REDACTED FOR PRIVACY
+Admin Country: FR
+Admin Organization: REDACTED FOR PRIVACY
+Admin Po",VirusTotal
+windows-warning.com,com,19,No,Yes,"GODADDY.COM, LLC",1488326400.0,1494374400.0,0,0,0,0,91,91,Low,{},Unknown,1746374071.0,"Domain Name: WINDOWS-WARNING.COM
+Registrar: GODADDY.COM, LLC
+Sponsoring Registrar IANA ID: 146
+Whois",VirusTotal
+pc-optimizer.net,net,16,No,Yes,"GODADDY.COM, LLC",1386201600.0,1446336000.0,0,0,0,0,91,91,Low,{},Unknown,Unknown,"Domain Name: PC-OPTIMIZER.NET
+Registrar: GODADDY.COM, LLC
+Sponsoring Registrar IANA ID: 146
+Whois Se",VirusTotal
+error-cleaner.com,com,17,No,Yes,"NameCheap, Inc.",1294579508.0,1577094034.0,0,0,0,0,91,91,Low,{'BitDefender': 'education'},Unknown,1595288013.0,"Creation Date: 2011-01-09T13:25:08Z
+DNSSEC: unsigned
+Domain Name: ERROR-CLEANER.COM
+Domain Status: c",VirusTotal
+system-repair.net,net,17,No,Yes,Unknown,1771372800.0,1771372800.0,0,0,0,56,35,91,Low,{},613367.0,1776903104.0,"Create date: 2026-02-18 00:00:00
+Domain name: system-repair.net
+Domain registrar id: 4067.0
+Domain r",VirusTotal
+virus-removal.org,org,17,No,Yes,"Namesilo, LLC",1589433294.0,1621044796.0,0,0,0,48,43,91,Low,{},Unknown,1652763289.0,"Creation Date: 2020-05-14T05:14:54Z
+DNSSEC: unsigned
+Domain Name: VIRUS-REMOVAL.ORG
+Domain Status: c",VirusTotal
+tech-support-alert.com,com,22,No,Yes,"ENOM, INC.",1417734780.0,1417706016.0,0,0,0,55,36,91,Low,{},Unknown,1768141559.0,"Domain Name: TECH-SUPPORT-ALERT.COM
+Registrar: ENOM, INC.
+Sponsoring Registrar IANA ID: 48
+Whois Ser",VirusTotal
+security-alert-windows.com,com,26,No,Yes,"GODADDY.COM, LLC",1498608000.0,1498608000.0,0,0,0,0,91,91,Low,{'Forcepoint ThreatSeeker': 'newly registered websites'},Unknown,Unknown,"Domain Name: SECURITY-ALERT-WINDOWS.COM
+Registrar: GODADDY.COM, LLC
+Sponsoring Registrar IANA ID: 14",VirusTotal
+canadian-pharmacy.net,net,21,No,Yes,Danesco Trading Ltd.,1407408999.0,1550723256.0,0,0,0,0,91,91,Low,{},Unknown,1561814221.0,"Domain Name: CANADIAN-PHARMACY.NET
+Registry Domain ID: 1870054044_DOMAIN_NET-VRSN
+Registrar WHOIS Se",VirusTotal
+rx-pills.com,com,12,No,Yes,Unknown,1740787200.0,1740787200.0,0,0,1,58,32,91,Low,{'alphaMountain.ai': 'Health (alphaMountain.ai)'},Unknown,1776619124.0,"Create date: 2025-03-01 00:00:00
+Domain name: rx-pills.com
+Domain registrar id: 3765
+Domain registra",VirusTotal
+online-rx.net,net,13,No,Yes,"NICENIC INTERNATIONAL GROUP CO., LIMITED",1555765012.0,1736335675.0,0,0,0,56,35,91,Low,{},Unknown,1777300611.0,"Creation Date: 2019-04-20T12:55:03Z
+Creation Date: 2019-04-20T12:56:52Z
+DNSSEC: unsigned
+Domain Name",VirusTotal
+cheap-meds.org,org,14,No,Yes,Unknown,Unknown,Unknown,0,0,0,46,45,91,Low,{},Unknown,1628222959.0,Unknown,VirusTotal
+pills-online.com,com,16,No,Yes,Danesco Trading Ltd.,1403703078.0,1696422429.0,0,0,0,0,91,91,Low,{},Unknown,1767312629.0,"Admin City: Statutory Masking for data privacy
+Admin Country: Statutory Masking for data privacy
+Adm",VirusTotal
+generic-drugs.net,net,17,No,Yes,"GoDaddy.com, LLC",871358400.0,1744403232.0,0,0,0,0,91,91,Low,{},Unknown,1747083121.0,"Creation Date: 1997-08-12T04:00:00Z
+DNSSEC: unsigned
+Domain Name: GENERIC-DRUGS.NET
+Domain Status: c",VirusTotal
+pharma-shop.org,org,15,No,Yes,Porkbun LLC,1711094790.0,1773342628.0,0,10,1,48,32,91,Medium,{},Unknown,1777536260.0,"Creation Date: 2024-03-22T08:06:30Z
+DNSSEC: unsigned
+Domain Name: pharma-shop.org
+Domain Status: cli",VirusTotal
+discount-rx.com,com,15,No,Yes,ABOVE.COM PTY LTD.,1067281275.0,1761008548.0,0,0,0,58,33,91,Low,{},Unknown,1776159214.0,"Admin Country: PL
+Admin Email: dc3a58abd7ab9746s@privacy.above.com
+Admin State/Province: mazowieckie",VirusTotal
+exploit.in,in,10,No,No,"NameSilo, LLC",1139745175.0,1763111130.0,-1,0,1,58,32,91,Low,{},50635.0,1777603139.0,"Admin City: REDACTED FOR PRIVACY
+Admin Country: REDACTED FOR PRIVACY
+Admin Organization: REDACTED FO",VirusTotal
+hackforums.net,net,14,No,No,Epik LLC,1127845121.0,1771185980.0,0,1,1,55,34,91,Low,{},36308.0,1777638172.0,"Admin City: Sheridan
+Admin Country: US
+Admin Email: 0260899467e959aas@anonymize.com
+Admin Organizati",VirusTotal
+nulled.to,to,9,No,No,Government of Kingdom of Tonga,1646455215.0,1739197054.0,-42,2,1,55,33,91,Low,{},15381.0,1777561176.0,"Creation Date: 2022-03-05T04:40:15.000Z
+DNSSEC: unsigned
+Domain Name: nulled.to
+Domain Status: ok ht",VirusTotal
+cracked.io,io,10,No,No,Immaterialism Limited,1418554789.0,1738164359.0,0,5,1,50,35,91,Medium,{},8651.0,1777570182.0,"Admin City: REDACTED
+Admin Country: REDACTED
+Admin Organization: REDACTED
+Admin Postal Code: REDACTE",VirusTotal
+sinfulsite.com,com,14,No,No,Unknown,1544572800.0,1768780800.0,0,0,0,56,35,91,Low,{},385043.0,1776185576.0,"Administrative city: Reykjavik
+Administrative country: Iceland
+Administrative email: 33af5f243326fd0",VirusTotal
+darkc0de.com,com,12,Yes,No,"GoDaddy.com, LLC",1185661113.0,1751574339.0,0,2,0,56,33,91,Low,{},474432.0,1777230520.0,"Creation Date: 2007-07-28T22:18:33Z
+DNSSEC: signedDelegation
+Domain Name: DARKC0DE.COM
+Domain Status",VirusTotal
+packetstormsecurity.com,com,23,No,No,"Network Solutions, LLC",986852344.0,1770537281.0,1,1,0,57,33,91,Low,{},37542.0,1777632657.0,"Creation Date: 2001-04-09T21:39:04Z
+DNSSEC: 41063 13 2 8C734FCCB15CCC4F14F31383ADA06156085180F5F9D22",VirusTotal
+exploit-db.com,com,14,No,Yes,GANDI SAS,1258668746.0,1760901574.0,1,3,1,57,30,91,Low,"{'alphaMountain.ai': 'Hacking, Information/Computer Security (alphaMountain.ai)', 'BitDefender': 'hacking', 'Sophos': 'hacking', 'Forcepoint ThreatSee",13825.0,1777616843.0,"Admin City: REDACTED FOR PRIVACY
+Admin Country: REDACTED FOR PRIVACY
+Admin Email: 54aec3dfbcc18963s@",VirusTotal
+securiteam.com,com,14,No,No,"Amazon Registrar, Inc.",899438400.0,1760110702.0,0,0,0,54,37,91,Low,{},661624.0,1777604433.0,"Creation Date: 1998-07-03T04:00:00Z
+DNSSEC: unsigned
+Domain Name: SECURITEAM.COM
+Domain Name: securi",VirusTotal
+securityfocus.com,com,17,No,No,"GoDaddy Corporate Domains, LLC",917672400.0,1767108387.0,0,1,0,57,33,91,Low,{},47747.0,1777630225.0,"Creation Date: 1999-01-30T05:00:00Z
+DNSSEC: signedDelegation
+Domain Name: SECURITYFOCUS.COM
+Domain S",VirusTotal
+osvdb.org,org,9,No,No,"GoDaddy.com, LLC",1026946480.0,1756680896.0,0,0,0,59,32,91,Low,{},797538.0,1777628515.0,"Creation Date: 2002-07-17T22:54:40Z
+DNSSEC: unsigned
+Domain Name: osvdb.org
+Domain Status: clientDel",VirusTotal
+xssposed.org,org,12,No,No,"GoDaddy.com, LLC",1399396370.0,1774702451.0,0,0,0,57,34,91,Low,{},Unknown,1777047282.0,"Creation Date: 2014-05-06T17:12:50Z
+DNSSEC: unsigned
+Domain Name: xssposed.org
+Domain Status: client",VirusTotal
+xss.is,is,6,No,No,Unknown,Unknown,Unknown,-1,4,1,55,31,91,Medium,{},62888.0,1777603120.0,"created: November 12 2009
+created: October 30 2006
+created: September 19 2018
+dnssec: unsigned deleg",VirusTotal
+antichat.ru,ru,11,No,No,RU-CENTER-RU,Unknown,Unknown,1,1,1,56,33,91,Low,"{'BitDefender': 'webproxy', 'Xcitium Verdict Cloud': 'information security', 'Sophos': 'information technology', 'Forcepoint ThreatSeeker': 'hacking'}",309665.0,1777580319.0,"Last updated on 2026-04-11T07:03:01Z
+created: 2001-08-30T20:00:00Z
+domain: ANTICHAT.RU
+nserver: pns1",VirusTotal
+carder.pro,pro,10,No,No,One.com A/S,1560247935.0,1731932735.0,0,3,1,54,33,91,Low,"{'alphaMountain.ai': 'Hosting, Parked Site, Suspicious (alphaMountain.ai)'}",454147.0,1773501152.0,"Admin City: REDACTED FOR PRIVACY
+Admin Country: REDACTED FOR PRIVACY
+Admin Organization: REDACTED FO",VirusTotal
+verified.sc,sc,11,No,No,Unknown,Unknown,Unknown,0,2,0,55,34,91,Low,{},312359.0,1772079675.0,Unknown,VirusTotal
+iot-scanner.com,com,15,No,Yes,Porkbun LLC,1590104894.0,1747706089.0,0,0,0,56,35,91,Low,{},Unknown,1775750464.0,"Creation Date: 2020-05-21T23:48:14Z
+DNSSEC: unsigned
+Domain Name: IOT-SCANNER.COM
+Domain Status: cli",VirusTotal
+default-password.com,com,20,No,Yes,Unknown,1768608000.0,1768953600.0,0,0,0,56,35,91,Low,{},Unknown,1774230448.0,"Administrative city: Reykjavik
+Administrative country: Iceland
+Administrative email: 16a00471178b27b",VirusTotal
+flash-update.net,net,16,No,Yes,Unknown,1628467200.0,Unknown,0,0,0,57,34,91,Low,{},Unknown,1749477081.0,"Administrative city: Reykjavik
+Administrative country: Iceland
+Administrative email: 007ee07460ecfca",VirusTotal
+java-update.org,org,15,No,Yes,"NameCheap, Inc.",1685548713.0,1746514534.0,0,0,0,56,35,91,Low,{},Unknown,1776490612.0,"Creation Date: 2023-05-31T15:58:33Z
+DNSSEC: unsigned
+Domain Name: java-update.org
+Domain Status: cli",VirusTotal
+chrome-update.net,net,17,No,Yes,Unknown,1700524800.0,1700524800.0,0,0,0,55,36,91,Low,{},Unknown,1777363835.0,"Administrative city: San Mateo
+Administrative country: United States
+Administrative state: Californi",VirusTotal
+firefox-update.org,org,18,No,Yes,Unknown,1101254400.0,1763856000.0,0,0,0,0,91,91,Low,{},Unknown,1766592844.0,"Create date: 2004-11-24 00:00:00
+Domain name: firefox-update.org
+Domain registrar id: 292
+Domain reg",VirusTotal
+adobe-update.com,com,16,No,Yes,"GMO Internet Group, Inc. d/b/a Onamae.com",1728119301.0,1759736209.0,0,6,1,52,32,91,Medium,"{'alphaMountain.ai': 'Information Technology, Suspicious (alphaMountain.ai)'}",Unknown,1776971078.0,"Admin City: Largyab Gewog
+Admin Country: BT
+Admin Email: c7f48c2cef845b1es@proton.me
+Admin Organizat",VirusTotal
+windows-update.net,net,18,No,Yes,"NameSilo, LLC",1739860504.0,1770715860.0,0,0,0,57,34,91,Low,{},Unknown,1777322799.0,"Creation Date: 2025-02-18T06:35:04Z
+DNSSEC: unsigned
+Domain Name: WINDOWS-UPDATE.NET
+Domain Status: ",VirusTotal
+antivirus-update.org,org,20,No,Yes,Unknown,Unknown,Unknown,0,0,0,0,91,91,Low,{},Unknown,1545017612.0,Unknown,VirusTotal
+driver-update.net,net,17,No,Yes,"GoDaddy.com, LLC",1210527560.0,1682372663.0,0,0,0,48,43,91,Low,{},Unknown,1776801675.0,"Creation Date: 2008-05-11T17:39:20Z
+DNSSEC: unsigned
+Domain Name: DRIVER-UPDATE.NET
+Domain Status: c",VirusTotal
+media-player-update.com,com,23,No,Yes,"PSI-USA, INC. DBA DOMAIN ROBOT",1382745600.0,1445904000.0,0,0,0,0,91,91,Low,{},Unknown,1552766848.0,"Domain Name: MEDIA-PLAYER-UPDATE.COM
+Registrar: PSI-USA, INC. DBA DOMAIN ROBOT
+Sponsoring Registrar ",VirusTotal
