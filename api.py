@@ -7,6 +7,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
+import agents.intel_agents  # noqa: F401 - registers core agents
+import agents.red_team_blockchain_agent  # noqa: F401 - registers red-team blockchain agent
+import agents.red_team_linux_agent  # noqa: F401 - registers red-team linux agent
+import agents.red_team_web_agent  # noqa: F401 - registers red-team web agent
+import agents.red_team_windows_agent  # noqa: F401 - registers red-team windows agent
+from agents.registry import AgentRegistry
+from crew_red_team import RED_TEAM_SPECIALISTS, run_red_team_pipeline, run_red_team_specialist_pipeline
 from crew_threat_intel import DEFAULT_DB_PATH, run_threat_intel_pipeline
 
 
@@ -41,6 +48,34 @@ class ThreatIntelRunRequest(BaseModel):
         le=1200,
         description="Timeout in seconds for each generated remediation script.",
     )
+
+
+class RedTeamRunRequest(BaseModel):
+    target: str = Field(default="172.17.0.2", description="Authorized lab target.")
+    ports: str = Field(default="1-10000", description="Nmap port expression.")
+    timeout: int = Field(default=180, ge=1, le=1200, description="Nmap timeout in seconds.")
+    reuse_scan: str = Field(default="", description="Optional existing Nmap JSON path.")
+    use_agents: bool = Field(default=False, description="Use LLM specialist/reporting agents.")
+    execute: bool = Field(default=False, description="Execute generated red-team validation scripts.")
+    execution_timeout: int = Field(default=180, ge=1, le=1200, description="Timeout per generated script.")
+
+
+class RedTeamAgentRunRequest(BaseModel):
+    target: str = Field(default="172.17.0.2", description="Authorized lab target.")
+    domain: str = Field(default="web", description="One of: web, linux, windows, blockchain.")
+    ports: str = Field(default="1-10000", description="Nmap port expression if reuse_scan is not provided.")
+    timeout: int = Field(default=180, ge=1, le=1200, description="Nmap timeout in seconds.")
+    reuse_scan: str = Field(default="", description="Optional existing Nmap JSON path.")
+    use_nmap_agent: bool = Field(
+        default=True,
+        description="Call nmap_scan_agent for fresh enumeration unless reuse_scan is provided.",
+    )
+    use_llm_agent: bool = Field(
+        default=False,
+        description="Run the actual CrewAI specialist agent for narrative planning.",
+    )
+    execute: bool = Field(default=False, description="Execute only this specialist's generated validation script.")
+    execution_timeout: int = Field(default=180, ge=1, le=1200, description="Timeout for the specialist script.")
 
 
 def _compact_run_response(result: dict[str, Any]) -> dict[str, Any]:
@@ -91,6 +126,15 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/agents")
+def list_agents() -> dict[str, Any]:
+    names = AgentRegistry.get_all_agent_names()
+    return {
+        "agents": names,
+        "red_team_specialists": RED_TEAM_SPECIALISTS,
+    }
+
+
 @app.post("/api/threat-intel/run")
 def run_threat_intel(request: ThreatIntelRunRequest) -> dict[str, Any]:
     try:
@@ -117,6 +161,65 @@ def run_threat_intel(request: ThreatIntelRunRequest) -> dict[str, Any]:
 
     response = result if request.include_full_output else _compact_run_response(result)
     return jsonable_encoder(response)
+
+
+@app.post("/api/red-team/run")
+def run_red_team(request: RedTeamRunRequest) -> dict[str, Any]:
+    try:
+        result = run_red_team_pipeline(
+            target=request.target,
+            ports=request.ports,
+            timeout=request.timeout,
+            reuse_scan=request.reuse_scan,
+            use_agents=request.use_agents,
+            execute=request.execute,
+            execution_timeout=request.execution_timeout,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "red_team_run_failed",
+                "message": str(exc),
+                "type": exc.__class__.__name__,
+            },
+        ) from exc
+    return jsonable_encoder(result)
+
+
+@app.post("/api/red-team/agents/{agent_name}/run")
+def run_red_team_agent(agent_name: str, request: RedTeamAgentRunRequest) -> dict[str, Any]:
+    if request.domain not in RED_TEAM_SPECIALISTS:
+        raise HTTPException(status_code=400, detail=f"Unknown red-team domain: {request.domain}")
+    expected_agent = RED_TEAM_SPECIALISTS[request.domain]
+    if agent_name != expected_agent:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Agent {agent_name} does not match domain {request.domain}; expected {expected_agent}.",
+        )
+
+    try:
+        result = run_red_team_specialist_pipeline(
+            domain=request.domain,
+            target=request.target,
+            ports=request.ports,
+            timeout=request.timeout,
+            reuse_scan=request.reuse_scan,
+            use_nmap_agent=request.use_nmap_agent,
+            use_llm_agent=request.use_llm_agent,
+            execute=request.execute,
+            execution_timeout=request.execution_timeout,
+        )
+        return jsonable_encoder(result)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "red_team_agent_run_failed",
+                "message": str(exc),
+                "type": exc.__class__.__name__,
+            },
+        ) from exc
 
 
 @app.get("/api/threat-intel/runs")

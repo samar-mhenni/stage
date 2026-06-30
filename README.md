@@ -43,6 +43,53 @@ Reuse an existing scan JSON instead of scanning:
 python crew_threat_intel.py 172.17.0.2 --reuse-scan path/to/scan.json
 ```
 
+## Red-Team Validation
+
+The red-team pipeline reuses the same enumeration and generated-tool pattern, but focuses on
+authorized exploitability validation in a lab.
+
+Specialist agents:
+
+- `red_team_web_attack_agent` for HTTP, Tomcat, AJP, and web middleware checks.
+- `red_team_linux_attack_agent` for Linux/Unix network services and legacy daemons.
+- `red_team_windows_attack_agent` for SMB, NetBIOS, RDP, WinRM, LDAP, and AD-adjacent checks.
+- `red_team_blockchain_attack_agent` for exposed blockchain/node RPC metadata checks.
+- `red_team_exploit_planner_agent` coordinates the specialist findings into one plan.
+- `red_team_tool_generation_agent` writes reviewable validation scripts.
+- `red_team_reporting_agent` summarizes validation evidence.
+
+Specialist task files:
+
+- `tasks/red_team_web_tasks.py`
+- `tasks/red_team_linux_tasks.py`
+- `tasks/red_team_windows_tasks.py`
+- `tasks/red_team_blockchain_tasks.py`
+
+Generate a red-team plan and validation tools without executing them:
+
+```bash
+python crew_red_team.py 172.17.0.2 --reuse-scan outputs/runs/run_0022/nmap_scan.json --ports 1-10000
+```
+
+Execute the generated validation tools:
+
+```bash
+python crew_red_team.py 172.17.0.2 --reuse-scan outputs/runs/run_0022/nmap_scan.json --ports 1-10000 --execute
+```
+
+Artifacts are written under:
+
+```text
+outputs/runs/run_0001/red_team_plan.json
+outputs/runs/run_0001/red_team_report.md
+outputs/runs/run_0001/red_team_used.json
+outputs/runs/run_0001/red_team_tools/
+outputs/generated_red_team_tools/
+```
+
+Generated tools are bounded to the supplied target and avoid persistence, credential theft, and
+destructive actions.
+
 ## API
 
 Start the API:
@@ -58,6 +105,42 @@ curl -s -X POST http://127.0.0.1:8000/api/threat-intel/run \
   -H "Content-Type: application/json" \
   -d '{"target":"172.17.0.2","ports":"1-10000","timeout":180}' | python -m json.tool
 ```
+
+List registered agents:
+
+```bash
+curl -s http://127.0.0.1:8000/api/agents | python -m json.tool
+```
+
+Run the full red-team pipeline through the API:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/api/red-team/run \
+  -H "Content-Type: application/json" \
+  -d '{"target":"172.17.0.2","reuse_scan":"outputs/runs/run_0022/nmap_scan.json","execute":false}' \
+  | python -m json.tool
+```
+
+Run one red-team specialist agent through the API:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/api/red-team/agents/red_team_web_attack_agent/run \
+  -H "Content-Type: application/json" \
+  -d '{"domain":"web","target":"172.17.0.2","execute":true}' \
+  | python -m json.tool
+```
+
+Single-specialist runs call fresh enumeration by default and write a compact folder such as:
+
+```text
+outputs/runs/run_0001/web_agent/result.json
+outputs/runs/run_0001/web_agent/executive_summary.md
+outputs/runs/run_0001/web_agent/manifest.json
+outputs/runs/run_0001/web_agent/execution/execution_results.json
+```
+
+Use `reuse_scan` only when you intentionally want to skip enumeration and replay a previous scan.
+Set `use_nmap_agent:false` if you want direct `nmap_tool` execution instead of `nmap_scan_agent`.
 
 List saved runs:
 

@@ -89,3 +89,74 @@ def create_remediation_script_generation_task(
         expected_output="JSON manifest describing generated defensive scripts.",
         agent=agent,
     )
+
+
+@TaskRegistry.register("red_team_recon_task")
+def create_red_team_recon_task(agent, target: str, ports: str, timeout: int) -> Task:
+    return Task(
+        description=(
+            "Run authorized red-team reconnaissance against this lab target.\n\n"
+            f"Target: {target}\n"
+            f"Ports: {ports}\n"
+            f"Timeout seconds: {timeout}\n\n"
+            "Return structured Nmap JSON only. Keep enumeration bounded to the supplied target."
+        ),
+        expected_output="Valid Nmap JSON with host, port, service, product, and version evidence.",
+        agent=agent,
+    )
+
+
+@TaskRegistry.register("red_team_exploit_planning_task")
+def create_red_team_exploit_planning_task(agent, target: str, scan_context: str, vulnerability_context: str) -> Task:
+    return Task(
+        description=(
+            "Create a controlled red-team exploitability plan for an authorized lab target.\n\n"
+            f"Target: {target}\n\n"
+            f"Nmap scan evidence:\n{scan_context}\n\n"
+            f"Vulnerability evidence:\n{vulnerability_context}\n\n"
+            "Prioritize likely exploitable services, identify validation tooling, define safety "
+            "constraints, and note prerequisites. Do not include persistence, credential theft, "
+            "destructive actions, or instructions for targets outside this lab."
+        ),
+        expected_output="A prioritized exploitability validation plan with tools, commands, and safety notes.",
+        agent=agent,
+    )
+
+
+@TaskRegistry.register("red_team_tool_generation_task")
+def create_red_team_tool_generation_task(agent, target: str, scan_context: str, exploit_plan: str) -> Task:
+    return Task(
+        description=(
+            "Generate a JSON manifest of reviewable red-team validation scripts for this authorized lab.\n\n"
+            f"Target: {target}\n\n"
+            f"Nmap scan evidence:\n{scan_context}\n\n"
+            f"Exploitability plan:\n{exploit_plan}\n\n"
+            "Scripts must be bounded to the target, log every command, and default to plan-only or "
+            "safe-check mode. Active validation must require an explicit operator flag."
+        ),
+        expected_output="JSON manifest describing generated red-team validation scripts.",
+        agent=agent,
+    )
+
+
+@TaskRegistry.register("red_team_reporting_task")
+def create_red_team_reporting_task(
+    agent,
+    target: str,
+    scan_context: str,
+    exploit_plan: str,
+    execution_context: str,
+) -> Task:
+    return Task(
+        description=(
+            "Write a red-team validation report for the authorized lab target.\n\n"
+            f"Target: {target}\n\n"
+            f"Nmap scan evidence:\n{scan_context}\n\n"
+            f"Exploitability plan:\n{exploit_plan}\n\n"
+            f"Generated-tool execution evidence:\n{execution_context}\n\n"
+            "Separate confirmed observations from likely exploitability and skipped checks. Include "
+            "a list of tools used and recommended next validation steps."
+        ),
+        expected_output="A concise red-team validation report.",
+        agent=agent,
+    )

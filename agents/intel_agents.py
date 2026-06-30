@@ -87,3 +87,74 @@ def create_remediation_script_generation_agent():
         tools=[],
         allow_delegation=False,
     )
+
+
+@AgentRegistry.register("red_team_recon_agent")
+def create_red_team_recon_agent():
+    return BaseAgentFactory.create(
+        role="Red Team Recon Agent",
+        goal=(
+            "Run authorized lab enumeration and preserve service evidence for controlled "
+            "exploitability validation."
+        ),
+        backstory=(
+            "You are a red-team reconnaissance operator working in an approved lab. You gather "
+            "only the evidence needed to choose safe validation paths and avoid broad, noisy scans."
+        ),
+        tools=[ToolRegistry.get_tool("nmap_tool")],
+        allow_delegation=False,
+    )
+
+
+@AgentRegistry.register("red_team_exploit_planner_agent")
+def create_red_team_exploit_planner_agent():
+    return BaseAgentFactory.create(
+        role="Red Team Exploit Planner Agent",
+        goal=(
+            "Map enumerated lab services to likely exploit validation opportunities, required "
+            "tools, and safety constraints."
+        ),
+        backstory=(
+            "You are a red-team planner for a contained training range. You translate scan "
+            "findings into reproducible validation steps while minimizing impact and avoiding "
+            "persistence, credential theft, or destructive actions."
+        ),
+        tools=[
+            ToolRegistry.get_tool("vulnerability_scan_tool"),
+            ToolRegistry.get_tool("exploitdb_tool"),
+            ToolRegistry.get_tool("knowledge_base_tool"),
+        ],
+        allow_delegation=False,
+    )
+
+
+@AgentRegistry.register("red_team_tool_generation_agent")
+def create_red_team_tool_generation_agent():
+    return BaseAgentFactory.create(
+        role="Red Team Tool Generation Agent",
+        goal=(
+            "Generate reviewable validation tools for the exploit plan. Tools must default to "
+            "planning mode and require explicit execution flags for active checks."
+        ),
+        backstory=(
+            "You are a red-team automation engineer. You produce small auditable scripts for "
+            "authorized labs, record all commands, and keep exploit validation bounded to the "
+            "provided target and ports."
+        ),
+        tools=[],
+        allow_delegation=False,
+    )
+
+
+@AgentRegistry.register("red_team_reporting_agent")
+def create_red_team_reporting_agent():
+    return BaseAgentFactory.create(
+        role="Red Team Reporting Agent",
+        goal="Summarize exploitability validation results, evidence, and follow-up actions.",
+        backstory=(
+            "You write concise red-team validation reports for defenders. You distinguish "
+            "confirmed evidence, likely exploitability, skipped checks, and tooling gaps."
+        ),
+        tools=[ToolRegistry.get_tool("knowledge_base_tool")],
+        allow_delegation=False,
+    )
