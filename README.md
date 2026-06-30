@@ -1,53 +1,100 @@
-# AI Threat Intelligence & Red Team Platform
+# CrewAI SOC Threat Intelligence
 
-A pure CLI-based, local AI cybersecurity assistant using Qwen (via OpenRouter), ChromaDB, and MITRE ATT&CK STIX data.
+Focused CrewAI workflow for authorized Metasploitable lab analysis.
 
-## Setup Instructions
+The supported path is:
 
-1. **Create virtual environment:**
-   ```bash
-   python -m venv venv
-   ```
+1. `nmap_scan_agent` runs Nmap service discovery with `NmapTool`.
+2. `vulnerability_scan_agent` analyzes the scan with `VulnerabilityScanTool`, ExploitDB, and the knowledge base.
+3. `reporting_agent` writes the SOC threat-intelligence report.
+4. `remediation_agent` writes concrete defensive correction steps.
+5. The full result is saved to SQLite in `outputs/threat_intel_results.db`.
 
-2. **Activate it on Windows:**
-   ```cmd
-   venv\Scripts\activate
-   ```
-   **Activate it on Linux/macOS:**
-   ```bash
-   source venv/bin/activate
-   ```
+The existing LLM and vector settings are preserved in `config/settings.py`:
 
-3. **Install packages:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_BASE_URL`
+- `QWEN_MODEL`
+- `CHROMADB_PATH`
 
-4. **Create `.env` file:**
-   Create a `.env` file in the root directory and add your OpenRouter configuration:
-   ```text
-   OPENROUTER_API_KEY=PASTE_YOUR_NEW_OPENROUTER_KEY_HERE
-   OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-   QWEN_MODEL=qwen/qwen3.5-flash
-   ```
+## Install
 
-5. **Test Qwen API Connection:**
-   ```bash
-   python test_qwen.py
-   ```
+```bash
+pip install -r requirements.txt
+```
 
-6. **Ingest MITRE ATT&CK Data:**
-   *(Ensure you have cloned `https://github.com/mitre/cti.git` into the `cti/` folder first)*
-   ```bash
-   python ingest.py
-   ```
+## Run
 
-7. **Test Direct Vector Search (No LLM):**
-   ```bash
-   python search_db.py
-   ```
+Default target is the existing Metasploitable lab address `172.17.0.2`.
 
-8. **Run AI Agents (CLI):**
-   ```bash
-   python interactive.py
-   ```
+```bash
+python crew_threat_intel.py
+```
+
+Use a custom target:
+
+```bash
+python crew_threat_intel.py 172.17.0.2 --ports 1-10000 --timeout 180
+```
+
+Reuse an existing scan JSON instead of scanning:
+
+```bash
+python crew_threat_intel.py 172.17.0.2 --reuse-scan path/to/scan.json
+```
+
+## API
+
+Start the API:
+
+```bash
+uvicorn api:app --host 127.0.0.1 --port 8000
+```
+
+Run the pipeline:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/api/threat-intel/run \
+  -H "Content-Type: application/json" \
+  -d '{"target":"172.17.0.2","ports":"1-10000","timeout":180}' | python -m json.tool
+```
+
+List saved runs:
+
+```bash
+curl -s http://127.0.0.1:8000/api/threat-intel/runs | python -m json.tool
+```
+
+Fetch a run:
+
+```bash
+curl -s http://127.0.0.1:8000/api/threat-intel/runs/1 | python -m json.tool
+```
+
+## Output
+
+Results are stored in:
+
+```text
+outputs/threat_intel_results.db
+```
+
+Each run also writes old-style file artifacts:
+
+```text
+outputs/runs/run_0001/threat_intel_output.md
+outputs/runs/run_0001/nmap_scan.json
+outputs/runs/run_0001/service_summary.txt
+outputs/runs/run_0001/vulnerability_report.md
+outputs/runs/run_0001/soc_report.md
+outputs/runs/run_0001/remediation_plan.md
+outputs/runs/run_0001/nmap_agent_output.txt
+```
+
+Table:
+
+```text
+threat_intel_runs
+```
+
+The table includes target, ports, raw scan JSON, service summary, threat-intel enrichment, and the final SOC report.

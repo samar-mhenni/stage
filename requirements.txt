@@ -4,3 +4,11 @@ pandas
 tqdm
 python-dotenv
 openai
+fastapi
+uvicorn
+pydantic
+crewai[tools]
+langchain-openai
+neo4j
+requests
+pyyaml

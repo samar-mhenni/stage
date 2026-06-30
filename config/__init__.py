@@ -1,0 +1,3 @@
+"""
+Central configuration package.
+"""
