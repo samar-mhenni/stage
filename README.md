@@ -2,13 +2,21 @@
 
 Focused CrewAI workflow for authorized Metasploitable lab analysis.
 
-The supported path is:
+The supported threat-intel crew path is:
 
-1. `nmap_scan_agent` runs Nmap service discovery with `NmapTool`.
-2. `vulnerability_scan_agent` analyzes the scan with `VulnerabilityScanTool`, ExploitDB, and the knowledge base.
-3. `reporting_agent` writes the SOC threat-intelligence report.
-4. `remediation_agent` writes concrete defensive correction steps.
-5. The full result is saved to SQLite in `outputs/threat_intel_results.db`.
+1. `collection_agent` collects authorized service and telemetry evidence.
+2. `enrichment_agent` enriches scan evidence with vulnerability, ExploitDB, IOC, and knowledge-base context.
+3. `correlation_agent` correlates vulnerabilities, alerts, logs, and generated detections.
+4. `prediction_agent` predicts likely attacker next steps and defensive watchpoints.
+5. `reporting_agent` writes the SOC threat-intelligence report.
+6. `response_agent` writes response and remediation actions.
+7. The full result is saved to SQLite in `outputs/threat_intel_results.db`.
+
+Backward-compatible aliases still exist for older code paths:
+
+- `nmap_scan_agent` maps to `collection_agent`.
+- `vulnerability_scan_agent` maps to `enrichment_agent`.
+- `remediation_agent` maps to `response_agent`.
 
 The existing LLM and vector settings are preserved in `config/settings.py`:
 
@@ -31,16 +39,34 @@ Default target is the existing Metasploitable lab address `172.17.0.2`.
 python crew_threat_intel.py
 ```
 
-Use a custom target:
+Use a custom target with an existing evidence file:
 
 ```bash
-python crew_threat_intel.py 172.17.0.2 --ports 1-10000 --timeout 180
+python crew_threat_intel.py 172.17.0.2 --reuse-scan path/to/evidence.json --ports 1-10000 --timeout 180
 ```
 
-Reuse an existing scan JSON instead of scanning:
+Threat-intel runs require existing collected evidence. The agents use the LLM plus the ingested
+knowledge database, then `tool_generation_agent` creates fresh helper scripts for the run.
 
 ```bash
-python crew_threat_intel.py 172.17.0.2 --reuse-scan path/to/scan.json
+python crew_threat_intel.py 172.17.0.2 --reuse-scan path/to/evidence.json
+```
+
+Run the six-stage pipeline against fake test data without live scanning:
+
+```bash
+python crew_threat_intel.py 172.17.0.2 \
+  --reuse-scan threat_data/test_logs/fake_nmap_scan.json \
+  --no-auto-remediation \
+  --db-path outputs/test_threat_intel_results.db
+```
+
+Fake telemetry logs for tests are included at:
+
+```text
+threat_data/test_logs/eve.json
+threat_data/test_logs/conn.log
+threat_data/test_logs/fake_nmap_scan.json
 ```
 
 ## Red-Team Validation
@@ -169,6 +195,8 @@ outputs/runs/run_0001/threat_intel_output.md
 outputs/runs/run_0001/nmap_scan.json
 outputs/runs/run_0001/service_summary.txt
 outputs/runs/run_0001/vulnerability_report.md
+outputs/runs/run_0001/correlation_report.md
+outputs/runs/run_0001/prediction_report.md
 outputs/runs/run_0001/soc_report.md
 outputs/runs/run_0001/remediation_plan.md
 outputs/runs/run_0001/nmap_agent_output.txt

@@ -3,8 +3,22 @@ from crewai.agents.crew_agent_executor import CrewAgentExecutor
 from config.settings import settings
 import os
 
-def get_default_llm():
+def get_default_llm(max_tokens: int = 900):
     """Return the configured LLM for all agents using standard CrewAI patterns."""
+    provider = settings.LLM_PROVIDER.lower()
+    if provider == "groq":
+        if os.getenv("OPENAI_API_KEY", "").startswith(("sk-or-v1", "gsk_")):
+            os.environ.pop("OPENAI_API_KEY", None)
+        os.environ["GROQ_API_KEY"] = settings.GROQ_API_KEY
+        return LLM(
+            model=settings.GROQ_MODEL,
+            provider="openai",
+            api_key=settings.GROQ_API_KEY,
+            base_url=settings.GROQ_BASE_URL,
+            temperature=0.1,
+            max_tokens=max_tokens,
+        )
+
     # Since LiteLLM doesn't like generic OpenAI keys for OpenRouter sometimes, we ensure it uses the specific one.
     if os.getenv("OPENAI_API_KEY", "").startswith("sk-or-v1"):
         os.environ.pop("OPENAI_API_KEY", None)
@@ -15,7 +29,7 @@ def get_default_llm():
         api_key=settings.OPENROUTER_API_KEY,
         base_url=settings.OPENROUTER_BASE_URL,
         temperature=0.1,
-        max_tokens=3000
+        max_tokens=max_tokens
     )
 
 class BaseAgentFactory:
@@ -24,7 +38,8 @@ class BaseAgentFactory:
     @classmethod
     def create(cls, **kwargs) -> Agent:
         """Create an agent with default configurations (LLM, verbosity)."""
-        llm = kwargs.pop('llm', get_default_llm())
+        llm_max_tokens = kwargs.pop('llm_max_tokens', 900)
+        llm = kwargs.pop('llm', get_default_llm(llm_max_tokens))
         verbose = kwargs.pop('verbose', settings.DEBUG_MODE)
         
         return Agent(

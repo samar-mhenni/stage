@@ -1,11 +1,6 @@
 from agents.base_agent import BaseAgentFactory
 from agents.registry import AgentRegistry
-from tools.registry import ToolRegistry
-
-
-import tools.exploitdb_tool  # noqa: F401 - registers exploitdb_tool
-import tools.knowledge_base_tool  # noqa: F401 - registers knowledge_base_tool
-import tools.vulnerability_scan_tool  # noqa: F401 - registers vulnerability_scan_tool
+from agents.tool_config import configured_agent_tools
 
 
 @AgentRegistry.register("red_team_web_attack_agent")
@@ -21,10 +16,6 @@ def create_red_team_web_attack_agent():
             "non-destructive checks such as exposed admin surfaces, default credential validation, "
             "dangerous HTTP methods, and known vulnerable web middleware."
         ),
-        tools=[
-            ToolRegistry.get_tool("vulnerability_scan_tool"),
-            ToolRegistry.get_tool("exploitdb_tool"),
-            ToolRegistry.get_tool("knowledge_base_tool"),
-        ],
+        tools=configured_agent_tools("red_team_web_attack_agent"),
         allow_delegation=False,
     )

@@ -1,0 +1,12 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	conn
+#open	2026-07-02-09-14-00
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	service	duration	orig_bytes	resp_bytes	conn_state	missed_bytes	history
+#types	time	string	addr	port	addr	port	enum	string	interval	count	count	string	count	string
+1782983711.103221	Cfake001	198.51.100.23	48122	172.17.0.2	21	tcp	ftp	8.22	802	1210	SF	0	ShADadfF
+1782983862.884011	Cfake002	198.51.100.24	52990	172.17.0.2	23	tcp	telnet	22.08	3110	2940	SF	0	ShADadfF
+1782984063.551992	Cfake003	198.51.100.25	40044	172.17.0.2	445	tcp	smb	4.47	1400	2200	SF	0	ShADadfF
+#close	2026-07-02-09-25-00

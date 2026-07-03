@@ -1,11 +1,6 @@
 from agents.base_agent import BaseAgentFactory
 from agents.registry import AgentRegistry
-from tools.registry import ToolRegistry
-
-
-import tools.exploitdb_tool  # noqa: F401 - registers exploitdb_tool
-import tools.knowledge_base_tool  # noqa: F401 - registers knowledge_base_tool
-import tools.vulnerability_scan_tool  # noqa: F401 - registers vulnerability_scan_tool
+from agents.tool_config import configured_agent_tools
 
 
 @AgentRegistry.register("red_team_blockchain_attack_agent")
@@ -21,10 +16,6 @@ def create_red_team_blockchain_attack_agent():
             "interfaces, unsafe node APIs, weak network configuration, and read-only chain metadata "
             "checks. You do not attempt fund movement, private-key extraction, or transaction abuse."
         ),
-        tools=[
-            ToolRegistry.get_tool("vulnerability_scan_tool"),
-            ToolRegistry.get_tool("exploitdb_tool"),
-            ToolRegistry.get_tool("knowledge_base_tool"),
-        ],
+        tools=configured_agent_tools("red_team_blockchain_attack_agent"),
         allow_delegation=False,
     )

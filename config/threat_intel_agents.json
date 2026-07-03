@@ -1,0 +1,100 @@
+{
+  "default_tools": ["knowledge_base_tool"],
+  "red_team": {
+    "artifacts": {
+      "tools_subdir": "red_team_tools",
+      "recon_subdir": "red_team_recon",
+      "current_tools_dir": "outputs/generated_red_team_tools",
+      "current_recon_dir": "outputs/generated_red_team_recon"
+    },
+    "recon": {
+      "tool": "nmap",
+      "blocked_args": ["-oX", "-oG", "-oA", "-iL", "--script", "--script-args", "-p"],
+      "blocked_shell_tokens": [";", "&", "|", "`", "$(", "\n", "\r"],
+      "required_service_detection_args": ["-sV", "-A"],
+      "max_args": 12
+    },
+    "pipeline_agents": [
+      "red_team_recon_agent",
+      "red_team_exploit_planner_agent",
+      "red_team_tool_generation_agent",
+      "red_team_reporting_agent"
+    ],
+    "agent_modules": {
+      "red_team_recon_agent": "agents.red_team_recon_agent"
+    },
+    "generated_tools": {
+      "active_args": ["--execute"]
+    },
+    "specialists": {
+      "web": {
+        "agent": "red_team_web_attack_agent",
+        "agent_module": "agents.red_team_web_agent",
+        "planning_task": "red_team_web_planning_task",
+        "task_module": "tasks.red_team_web_tasks"
+      },
+      "linux": {
+        "agent": "red_team_linux_attack_agent",
+        "agent_module": "agents.red_team_linux_agent",
+        "planning_task": "red_team_linux_planning_task",
+        "task_module": "tasks.red_team_linux_tasks"
+      },
+      "windows": {
+        "agent": "red_team_windows_attack_agent",
+        "agent_module": "agents.red_team_windows_agent",
+        "planning_task": "red_team_windows_planning_task",
+        "task_module": "tasks.red_team_windows_tasks"
+      },
+      "blockchain": {
+        "agent": "red_team_blockchain_attack_agent",
+        "agent_module": "agents.red_team_blockchain_agent",
+        "planning_task": "red_team_blockchain_planning_task",
+        "task_module": "tasks.red_team_blockchain_tasks"
+      }
+    }
+  },
+  "agents": {
+    "collection_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "enrichment_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "correlation_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "prediction_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "reporting_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "response_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "tool_generation_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "red_team_recon_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "red_team_exploit_planner_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "red_team_reporting_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "red_team_web_attack_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "red_team_linux_attack_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "red_team_windows_attack_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "red_team_blockchain_attack_agent": {
+      "tools": ["knowledge_base_tool"]
+    }
+  }
+}

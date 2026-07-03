@@ -1,66 +1,146 @@
 import argparse
+import importlib
 import json
+import re
 import shutil
 import subprocess
-from datetime import datetime, timezone
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
 import agents.intel_agents  # noqa: F401 - registers agents
-import agents.red_team_blockchain_agent  # noqa: F401 - registers red_team_blockchain_attack_agent
-import agents.red_team_linux_agent  # noqa: F401 - registers red_team_linux_attack_agent
-import agents.red_team_web_agent  # noqa: F401 - registers red_team_web_attack_agent
-import agents.red_team_windows_agent  # noqa: F401 - registers red_team_windows_attack_agent
 from agents.registry import AgentRegistry
+from agents.tool_config import configured_tool_names, load_agent_config
 from crew_threat_intel import (
     RUNS_DIR,
-    _open_services,
     build_run_artifacts,
+    extract_json_object,
     next_artifact_run_id,
+    previous_output_context,
     run_agent_task,
     run_nmap_stage,
-    run_nmap_tool_stage,
     run_vulnerability_stage,
-    run_vulnerability_tool_stage,
+    salvage_generated_script_objects,
     summarize_services,
+    truncate_context,
 )
-from tasks.intel_tasks import (
+from tasks.registry import TaskRegistry
+from tasks.red_team_tasks import (
     create_red_team_exploit_planning_task,
+    create_red_team_recon_tool_generation_task,
     create_red_team_reporting_task,
     create_red_team_tool_generation_task,
 )
-from tasks.red_team_blockchain_tasks import create_red_team_blockchain_planning_task
-from tasks.red_team_linux_tasks import create_red_team_linux_planning_task
-from tasks.red_team_web_tasks import create_red_team_web_planning_task
-from tasks.red_team_windows_tasks import create_red_team_windows_planning_task
 
 
-CURRENT_RED_TEAM_TOOLS_DIR = Path("outputs") / "generated_red_team_tools"
+def _red_team_config() -> dict[str, Any]:
+    return dict(load_agent_config().get("red_team", {}))
 
-RED_TEAM_SPECIALISTS = {
-    "web": "red_team_web_attack_agent",
-    "linux": "red_team_linux_attack_agent",
-    "windows": "red_team_windows_attack_agent",
-    "blockchain": "red_team_blockchain_attack_agent",
-}
 
-RED_TEAM_SPECIALIST_TASKS = {
-    "web": create_red_team_web_planning_task,
-    "linux": create_red_team_linux_planning_task,
-    "windows": create_red_team_windows_planning_task,
-    "blockchain": create_red_team_blockchain_planning_task,
-}
+def _red_team_artifact_config() -> dict[str, str]:
+    artifacts = _red_team_config().get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise ValueError("Missing red_team.artifacts config.")
+    return {str(key): str(value) for key, value in artifacts.items()}
+
+
+def _red_team_artifact_path(key: str) -> Path:
+    artifacts = _red_team_artifact_config()
+    if key not in artifacts:
+        raise ValueError(f"Missing red_team.artifacts.{key} config.")
+    return Path(artifacts[key])
+
+
+def _red_team_artifact_name(key: str) -> str:
+    artifacts = _red_team_artifact_config()
+    if key not in artifacts:
+        raise ValueError(f"Missing red_team.artifacts.{key} config.")
+    return Path(artifacts[key]).name
+
+
+def _red_team_pipeline_agents() -> list[str]:
+    agents = _red_team_config().get("pipeline_agents")
+    if not isinstance(agents, list) or not agents:
+        raise ValueError("Missing red_team.pipeline_agents config.")
+    return [str(agent) for agent in agents]
+
+
+def _red_team_generated_tool_active_args() -> list[str]:
+    generated_tools = _red_team_config().get("generated_tools", {})
+    if not isinstance(generated_tools, dict):
+        return []
+    active_args = generated_tools.get("active_args", [])
+    if not isinstance(active_args, list):
+        return []
+    return [str(arg) for arg in active_args]
+
+
+def _red_team_previous_context_files() -> tuple[str, ...]:
+    return (
+        "red_team_plan.md",
+        "red_team_report.md",
+        "red_team_used.json",
+        f"{_red_team_artifact_name('tools_subdir')}/manifest.json",
+    )
+
+
+def _red_team_specialist_config() -> dict[str, dict[str, str]]:
+    specialists = _red_team_config().get("specialists")
+    if not isinstance(specialists, dict) or not specialists:
+        raise ValueError("Missing red_team.specialists config.")
+    normalized: dict[str, dict[str, str]] = {}
+    for domain, spec in specialists.items():
+        if not isinstance(spec, dict) or not spec.get("agent") or not spec.get("planning_task"):
+            raise ValueError(f"Invalid red_team.specialists.{domain} config.")
+        normalized[str(domain)] = {
+            "agent": str(spec["agent"]),
+            "planning_task": str(spec["planning_task"]),
+            "agent_module": str(spec.get("agent_module", "")),
+            "task_module": str(spec.get("task_module", "")),
+        }
+    return normalized
+
+
+def _load_red_team_specialist_modules() -> None:
+    agent_modules = _red_team_config().get("agent_modules", {})
+    if isinstance(agent_modules, dict):
+        for module_name in agent_modules.values():
+            if module_name:
+                importlib.import_module(str(module_name))
+    for spec in _red_team_specialist_config().values():
+        for module_key in ("agent_module", "task_module"):
+            module_name = spec.get(module_key)
+            if module_name:
+                importlib.import_module(module_name)
+
+
+_load_red_team_specialist_modules()
+RED_TEAM_SPECIALISTS = {domain: spec["agent"] for domain, spec in _red_team_specialist_config().items()}
+
+
+def _write_executable(path: Path, body: str) -> None:
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o750)
+
+
+def _normalize_generated_script_body(body: str) -> str:
+    body = str(body or "").strip()
+    first_line = body.splitlines()[0] if body.splitlines() else body
+    if "\\n" in body and ("\n" not in body or "\\n" in first_line):
+        body = body.replace("\\r\\n", "\n").replace("\\n", "\n")
+    body = body.replace("\\$", "$").replace("\\\"", "\"")
+    return body.strip()
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the authorized lab red-team validation pipeline.")
-    parser.add_argument("target", nargs="?", default="172.17.0.2", help="Authorized lab target.")
+    parser.add_argument("target", help="Authorized lab target.")
     parser.add_argument("--domain", choices=sorted(RED_TEAM_SPECIALISTS), help="Run only one specialist domain.")
     parser.add_argument("--ports", default="1-10000", help="Nmap port expression.")
     parser.add_argument("--timeout", type=int, default=180, help="Nmap timeout in seconds.")
     parser.add_argument("--reuse-scan", default="", help="Optional existing Nmap JSON file.")
-    parser.add_argument("--use-agents", action="store_true", help="Use LLM agents for planning/reporting.")
-    parser.add_argument("--no-nmap-agent", action="store_true", help="Use the Nmap tool directly instead of nmap_scan_agent.")
+    parser.add_argument("--use-agents", action="store_true", help="Deprecated; red-team planning now uses agents.")
+    parser.add_argument("--no-nmap-agent", action="store_true", help="Deprecated compatibility flag.")
     parser.add_argument(
         "--execute",
         action="store_true",
@@ -70,340 +150,327 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _service_set(scan: dict[str, Any]) -> set[tuple[int, str, str, str]]:
-    services = set()
-    for item in _open_services(scan):
-        services.add(
-            (
-                int(item.get("port") or 0),
-                str(item.get("service") or "").lower(),
-                str(item.get("product") or "").lower(),
-                str(item.get("version") or "").lower(),
-            )
-        )
-    return services
-
-
-def build_exploit_plan(target: str, scan: dict[str, Any], vulnerability_scan: dict[str, Any]) -> dict[str, Any]:
-    services = _service_set(scan)
-    candidates: list[dict[str, Any]] = []
-    specialist_notes = {
-        "web": [],
-        "linux": [],
-        "windows": [],
-        "blockchain": [],
-    }
-
-    def add(domain: str, name: str, port: int, module: str, reason: str, command: str = "id") -> None:
-        candidates.append(
-            {
-                "domain": domain,
-                "name": name,
-                "target": target,
-                "port": port,
-                "metasploit_module": module,
-                "validation_command": command,
-                "reason": reason,
-                "safety": "Authorized lab validation only; no persistence, no credential theft, no destructive actions.",
-            }
-        )
-
-    for port, service, product, version in services:
-        if port == 21 and "vsftpd" in product and "2.3.4" in version:
-            add("linux", "vsftpd_234_backdoor", port, "exploit/unix/ftp/vsftpd_234_backdoor", "vsftpd 2.3.4 is a known backdoored release.")
-        if port == 3632 or "distccd" in product:
-            add("linux", "distcc_exec", port, "exploit/unix/misc/distcc_exec", "distccd is exposed and commonly allows remote command validation in lab images.")
-        if service == "irc" and "unrealircd" in product:
-            add("linux", "unreal_ircd_3281_backdoor", port, "exploit/unix/irc/unreal_ircd_3281_backdoor", "UnrealIRCd on Metasploitable-style labs is commonly backdoored.")
-        if port == 1099 or "rmi" in service or "rmi" in product:
-            add("linux", "java_rmi_server", port, "exploit/multi/misc/java_rmi_server", "Java RMI registry is exposed and should be checked for unsafe remote class loading.")
-        if port in {139, 445} and "samba" in product:
-            add("windows", "samba_usermap_script", port, "exploit/multi/samba/usermap_script", "Old Samba/SMB surfaces may be vulnerable to command execution or unsafe file-sharing behavior.")
-        if port == 8180 or "tomcat" in product:
-            add("web", "tomcat_mgr_login_check", port, "auxiliary/scanner/http/tomcat_mgr_login", "Tomcat manager exposure should be validated with non-destructive login checks.")
-        if service in {"http", "http-proxy"} or port in {80, 443, 8000, 8009, 8080, 8180, 8443}:
-            specialist_notes["web"].append(f"Web-facing service on port {port}: {product or service} {version}".strip())
-        if port in {139, 445, 3389, 5985, 5986, 389, 636, 88} or service in {"netbios-ssn", "microsoft-ds", "rdp", "ldap", "kerberos"}:
-            specialist_notes["windows"].append(f"Windows/SMB/AD-adjacent service on port {port}: {product or service}".strip())
-        if port in {8545, 8546, 30303, 8332, 8333, 18332, 18333, 26657, 26656, 9944, 9933}:
-            add("blockchain", "blockchain_rpc_exposure_check", port, "read_only_rpc_probe", "Blockchain/node RPC-style port is exposed and should be checked with read-only metadata calls.", "web3_clientVersion")
-            specialist_notes["blockchain"].append(f"Blockchain/RPC-style port {port} is exposed.")
-
-    if not specialist_notes["blockchain"]:
-        specialist_notes["blockchain"].append("No common blockchain RPC or node ports were observed in the enumeration.")
-
-    risk_counts: dict[str, int] = {}
-    for finding in vulnerability_scan.get("findings", []):
-        risk = str(finding.get("risk") or "unknown").lower()
-        risk_counts[risk] = risk_counts.get(risk, 0) + 1
-
-    return {
-        "target": target,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "candidate_count": len(candidates),
-        "risk_counts": risk_counts,
-        "specialists": {
-            domain: {
-                "agent": agent,
-                "candidate_count": len([item for item in candidates if item.get("domain") == domain]),
-                "notes": specialist_notes[domain],
-            }
-            for domain, agent in RED_TEAM_SPECIALISTS.items()
-        },
-        "candidates": candidates,
-        "notes": [
-            "Use --execute to run generated validation scripts.",
-            "Generated scripts use Metasploit check/run commands only when msfconsole is available.",
-            "Keep this pipeline on explicitly authorized lab targets.",
-        ],
-    }
-
-
-def _script_header(name: str, target: str) -> str:
-    return (
-        "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n\n"
-        f"# Generated by red_team_tool_generation_agent for authorized target {target}.\n"
-        "# Default mode is safe validation. Review before use.\n\n"
-        f'TARGET="${{TARGET:-{target}}}"\n'
-        'OUT_DIR="${OUT_DIR:-$(pwd)}"\n'
-        'mkdir -p "$OUT_DIR"\n'
-        'log(){ printf "[%s] %s\\n" "$(date -u +%FT%TZ)" "$*"; }\n'
-        'need(){ command -v "$1" >/dev/null 2>&1 || { log "missing dependency: $1"; exit 20; }; }\n\n'
-    )
-
-
-def _nmap_vuln_script(target: str, ports: str) -> str:
-    return (
-        _script_header("redteam_nmap_vuln", target)
-        + f'PORTS="${{PORTS:-{ports}}}"\n'
-        + 'need nmap\n'
-        + 'log "running bounded nmap vuln validation against $TARGET ports $PORTS"\n'
-        + 'nmap -Pn -sV --script vuln --max-retries 2 --host-timeout 120s -p "$PORTS" "$TARGET" '
-        + '| tee "$OUT_DIR/01_nmap_vuln.txt"\n'
-    )
-
-
-def _exploitdb_mapping_script(target: str, plan: dict[str, Any]) -> str:
-    names = sorted({c["name"].replace("_", " ") for c in plan.get("candidates", [])})
-    body = _script_header("redteam_exploitdb_mapping", target)
-    body += 'if command -v searchsploit >/dev/null 2>&1; then\n'
-    for name in names:
-        body += f'  log "searchsploit: {name}"\n  searchsploit "{name}" | tee -a "$OUT_DIR/02_searchsploit.txt" || true\n'
-    body += 'else\n  log "searchsploit not installed; writing candidate names only"\n'
-    for name in names:
-        body += f'  printf "%s\\n" "{name}" >> "$OUT_DIR/02_searchsploit.txt"\n'
-    body += "fi\n"
-    return body
-
-
-def _metasploit_resource(plan: dict[str, Any]) -> str:
-    lines = ["spool msf_validation.log"]
-    for candidate in plan.get("candidates", []):
-        module = candidate["metasploit_module"]
-        port = candidate["port"]
-        command = candidate.get("validation_command", "id")
-        lines.extend(
-            [
-                f"use {module}",
-                "setg VERBOSE false",
-                f"set RHOSTS {candidate['target']}",
-                f"set RPORT {port}",
-                f"set CMD {command}",
-                "check",
-                "run -j",
-                "sleep 3",
-                "sessions -l",
-                "sessions -K",
-            ]
-        )
-    lines.extend(["spool off", "exit -y", ""])
-    return "\n".join(lines)
-
-
-def _metasploit_runner_script(target: str) -> str:
-    return (
-        _script_header("redteam_metasploit_validation", target)
-        + 'RC_FILE="${RC_FILE:-$OUT_DIR/03_metasploit_validation.rc}"\n'
-        + 'need msfconsole\n'
-        + 'log "running Metasploit validation resource $RC_FILE"\n'
-        + 'msfconsole -q -r "$RC_FILE" | tee "$OUT_DIR/03_metasploit_validation.txt"\n'
-    )
-
-
-def _web_checks_script(target: str, scan: dict[str, Any]) -> str:
-    ports = " ".join(
-        str(item.get("port"))
-        for item in _open_services(scan)
-        if str(item.get("service") or "").lower() in {"http", "http-proxy"} or int(item.get("port") or 0) in {80, 443, 8009, 8080, 8180, 8443}
-    )
-    return (
-        _script_header("redteam_web_checks", target)
-        + f'PORTS="{ports}"\n'
-        + 'need curl\n'
-        + 'for port in $PORTS; do\n'
-        + '  scheme="http"; [ "$port" = "443" ] || [ "$port" = "8443" ] && scheme="https"\n'
-        + '  url="$scheme://$TARGET:$port/"\n'
-        + '  log "web header check $url"\n'
-        + '  curl -kIsS --max-time 8 "$url" >> "$OUT_DIR/05_web_headers.txt" 2>&1 || true\n'
-        + '  log "dangerous method check $url"\n'
-        + '  curl -kIsS -X OPTIONS --max-time 8 "$url" >> "$OUT_DIR/05_web_options.txt" 2>&1 || true\n'
-        + '  if [ "$port" = "8180" ]; then\n'
-        + '    manager_url="${url%/}/manager/html"\n'
-        + '    log "tomcat manager default credential validation $manager_url"\n'
-        + '    for cred in tomcat:tomcat both:tomcat role1:tomcat admin:admin manager:manager; do\n'
-        + '      code=$(curl -k -sS -o /dev/null -w "%{http_code}" --max-time 8 -u "$cred" "$manager_url" || true)\n'
-        + '      printf "%s %s %s\\n" "$manager_url" "$cred" "$code" >> "$OUT_DIR/05_tomcat_manager_login_checks.txt"\n'
-        + '      if [ "$code" = "200" ]; then\n'
-        + '        printf "tomcat_manager_default_credentials port=%s credential=%s url=%s\\n" "$port" "$cred" "$manager_url" >> "$OUT_DIR/confirmed_exploits.txt"\n'
-        + '      fi\n'
-        + '    done\n'
-        + '  fi\n'
-        + 'done\n'
-    )
-
-
-def _linux_checks_script(target: str, plan: dict[str, Any]) -> str:
-    linux_ports = " ".join(str(item["port"]) for item in plan.get("candidates", []) if item.get("domain") == "linux")
-    return (
-        _script_header("redteam_linux_checks", target)
-        + f'PORTS="{linux_ports}"\n'
-        + 'need nc\n'
-        + 'for port in $PORTS; do\n'
-        + '  log "linux service banner check $TARGET:$port"\n'
-        + '  timeout 5 nc -nv "$TARGET" "$port" < /dev/null >> "$OUT_DIR/06_linux_banners.txt" 2>&1 || true\n'
-        + 'done\n'
-    )
-
-
-def _windows_checks_script(target: str, scan: dict[str, Any]) -> str:
-    smb_ports = " ".join(
-        str(item.get("port"))
-        for item in _open_services(scan)
-        if int(item.get("port") or 0) in {139, 445, 3389, 5985, 5986, 389, 636, 88}
-    )
-    return (
-        _script_header("redteam_windows_checks", target)
-        + f'PORTS="{smb_ports}"\n'
-        + 'if command -v smbclient >/dev/null 2>&1; then\n'
-        + '  log "anonymous SMB share listing check"\n'
-        + '  smbclient -L "//$TARGET" -N -g >> "$OUT_DIR/07_smbclient.txt" 2>&1 || true\n'
-        + 'else\n'
-        + '  log "smbclient missing; using nc banner checks"\n'
-        + '  need nc\n'
-        + '  for port in $PORTS; do timeout 5 nc -nv "$TARGET" "$port" < /dev/null >> "$OUT_DIR/07_windows_banners.txt" 2>&1 || true; done\n'
-        + 'fi\n'
-    )
-
-
-def _blockchain_checks_script(target: str, scan: dict[str, Any]) -> str:
-    rpc_ports = " ".join(
-        str(item.get("port"))
-        for item in _open_services(scan)
-        if int(item.get("port") or 0) in {8545, 8546, 8332, 18332, 26657, 9944, 9933}
-    )
-    return (
-        _script_header("redteam_blockchain_checks", target)
-        + f'PORTS="{rpc_ports}"\n'
-        + 'need curl\n'
-        + 'if [ -z "$PORTS" ]; then log "no common blockchain RPC ports observed"; exit 0; fi\n'
-        + 'for port in $PORTS; do\n'
-        + '  url="http://$TARGET:$port"\n'
-        + '  log "read-only blockchain RPC metadata probe $url"\n'
-        + '  curl -sS --max-time 8 -H "Content-Type: application/json" '
-        + "--data '{\"jsonrpc\":\"2.0\",\"method\":\"web3_clientVersion\",\"params\":[],\"id\":1}' "
-        + '"$url" >> "$OUT_DIR/08_blockchain_rpc.txt" 2>&1 || true\n'
-        + 'done\n'
-    )
-
-
-def _manual_probe_script(target: str, scan: dict[str, Any]) -> str:
-    ports = " ".join(str(item.get("port")) for item in _open_services(scan) if item.get("port"))
-    return (
-        _script_header("redteam_manual_service_probes", target)
-        + f'PORTS="{ports}"\n'
-        + 'need nc\n'
-        + 'for port in $PORTS; do\n'
-        + '  log "banner probe $TARGET:$port"\n'
-        + '  timeout 4 bash -c "printf \'\'; nc -nv $TARGET $port" < /dev/null '
-        + '>> "$OUT_DIR/04_banner_probes.txt" 2>&1 || true\n'
-        + 'done\n'
-    )
-
-
-def _write_executable(path: Path, body: str) -> None:
-    path.write_text(body, encoding="utf-8")
-    path.chmod(0o750)
-
-
-def generate_red_team_tools(artifact_run_id: int, target: str, ports: str, scan: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
-    tools_dir = RUNS_DIR / f"run_{artifact_run_id:04d}" / "red_team_tools"
+def write_llm_red_team_tools(
+    artifact_run_id: int,
+    target: str,
+    manifest: dict[str, Any],
+    tool_subdir: str | None = None,
+    current_tools_dir: Path | None = None,
+) -> dict[str, Any]:
+    tool_subdir = tool_subdir or _red_team_artifact_name("tools_subdir")
+    tools_dir = (RUNS_DIR / f"run_{artifact_run_id:04d}" / tool_subdir).resolve()
+    current_tools_dir = (current_tools_dir or _red_team_artifact_path("current_tools_dir")).resolve()
     if tools_dir.exists():
         shutil.rmtree(tools_dir)
     tools_dir.mkdir(parents=True, exist_ok=True)
 
-    if CURRENT_RED_TEAM_TOOLS_DIR.exists():
-        shutil.rmtree(CURRENT_RED_TEAM_TOOLS_DIR)
-    CURRENT_RED_TEAM_TOOLS_DIR.mkdir(parents=True, exist_ok=True)
+    if current_tools_dir.exists():
+        shutil.rmtree(current_tools_dir)
+    current_tools_dir.mkdir(parents=True, exist_ok=True)
 
-    scripts = [
-        ("01_redteam_nmap_vuln.sh", "redteam_nmap_vuln", _nmap_vuln_script(target, ports), ["nmap"]),
-        ("02_redteam_exploitdb_mapping.sh", "redteam_exploitdb_mapping", _exploitdb_mapping_script(target, plan), ["searchsploit"]),
-        ("03_redteam_metasploit_validation.sh", "redteam_metasploit_validation", _metasploit_runner_script(target), ["msfconsole"]),
-        ("04_redteam_manual_service_probes.sh", "redteam_manual_service_probes", _manual_probe_script(target, scan), ["nc"]),
-        ("05_redteam_web_checks.sh", "redteam_web_checks", _web_checks_script(target, scan), ["curl"], "web"),
-        ("06_redteam_linux_checks.sh", "redteam_linux_checks", _linux_checks_script(target, plan), ["nc"], "linux"),
-        ("07_redteam_windows_checks.sh", "redteam_windows_checks", _windows_checks_script(target, scan), ["smbclient", "nc"], "windows"),
-        ("08_redteam_blockchain_checks.sh", "redteam_blockchain_checks", _blockchain_checks_script(target, scan), ["curl"], "blockchain"),
-    ]
+    manifest = dict(manifest)
+    manifest.setdefault("agent", "red_team_tool_generation_agent")
+    manifest.setdefault("target", target)
+    manifest.setdefault("mode", "llm_generated_each_run")
+    manifest.setdefault("safety", "Scripts default to dry-run and require --execute for active validation.")
 
-    rc_path = tools_dir / "03_metasploit_validation.rc"
-    rc_path.write_text(_metasploit_resource(plan), encoding="utf-8")
-    shutil.copy2(rc_path, CURRENT_RED_TEAM_TOOLS_DIR / rc_path.name)
-
-    manifest = {
-        "agent": "red_team_tool_generation_agent",
-        "target": target,
-        "mode": "generated_each_run",
-        "safety": "Scripts are bounded to the supplied authorized lab target. Active validation runs only when --execute is used.",
-        "metasploit_resource": str(rc_path),
-        "scripts": [],
-    }
-
-    for item in scripts:
-        filename, name, body, deps = item[:4]
-        domain = item[4] if len(item) > 4 else "coordinator"
-        path = tools_dir / filename
-        current_path = CURRENT_RED_TEAM_TOOLS_DIR / filename
-        _write_executable(path, body)
-        shutil.copy2(path, current_path)
-        manifest["scripts"].append(
+    written_scripts = []
+    for index, script in enumerate(manifest.get("scripts", []), start=1):
+        filename = str(script.get("filename") or f"{index:02d}_{script.get('name', 'red_team_tool')}.sh")
+        filename = Path(filename).name
+        body = _normalize_generated_script_body(str(script.get("body") or ""))
+        if not body:
+            continue
+        script_path = tools_dir / filename
+        current_script_path = current_tools_dir / filename
+        _write_executable(script_path, body + "\n")
+        shutil.copy2(script_path, current_script_path)
+        written_scripts.append(
             {
-                "name": name,
+                **{key: value for key, value in script.items() if key != "body"},
                 "filename": filename,
-                "path": str(path),
-                "current_path": str(current_path),
-                "domain": domain,
-                "agent": RED_TEAM_SPECIALISTS.get(domain, "red_team_tool_generation_agent"),
-                "dependencies": deps,
-                "purpose": "Controlled red-team validation for authorized lab evidence.",
+                "path": str(script_path),
+                "current_path": str(current_script_path),
+                "agent": script.get("agent", manifest.get("agent", "red_team_tool_generation_agent")),
+                "domain": script.get("domain", "coordinator"),
             }
         )
+    manifest["scripts"] = written_scripts
 
     manifest_path = tools_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    current_manifest_path = CURRENT_RED_TEAM_TOOLS_DIR / "manifest.json"
+    current_manifest_path = current_tools_dir / "manifest.json"
     current_manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return {
         "tools_dir": tools_dir,
         "manifest_path": manifest_path,
-        "current_tools_dir": CURRENT_RED_TEAM_TOOLS_DIR,
+        "current_tools_dir": current_tools_dir,
         "current_manifest_path": current_manifest_path,
+        "scripts_dir": tools_dir,
+        "current_scripts_dir": current_tools_dir,
         "manifest": manifest,
     }
 
 
-def execute_red_team_tools(tool_artifacts: dict[str, Any], timeout: int = 180) -> dict[str, Any]:
+def run_red_team_tool_generation_stage(
+    artifact_run_id: int,
+    target: str,
+    scan_context: str,
+    plan_context: str,
+) -> dict[str, Any]:
+    tool_agent = AgentRegistry.get_agent("red_team_tool_generation_agent")
+    retry_plan_context = truncate_context(plan_context, 6000)
+    manifest: dict[str, Any] = {}
+    raw_manifest = ""
+    for attempt in range(2):
+        tool_task = create_red_team_tool_generation_task(
+            tool_agent,
+            target,
+            truncate_context(scan_context, 4500),
+            retry_plan_context,
+        )
+        raw_manifest = run_agent_task("red_team_tool_generation_agent", tool_task)
+        try:
+            manifest = extract_json_object(raw_manifest)
+        except Exception:
+            repaired_manifest = raw_manifest.replace("\\$", "$")
+            try:
+                manifest = extract_json_object(repaired_manifest)
+            except Exception:
+                manifest = {
+                    "agent": "red_team_tool_generation_agent",
+                    "mode": "llm_generated_each_run",
+                    "safety": "Tool generation output could not be parsed as JSON.",
+                    "scripts": salvage_generated_script_objects(repaired_manifest),
+                    "raw_output": raw_manifest,
+                }
+        if manifest.get("scripts"):
+            break
+        retry_plan_context = (
+            "Previous tool manifest was invalid, empty, or had no scripts. "
+            "Return only complete valid minified JSON. Do not escape dollar signs. "
+            "Generate scripts for the distinct validation candidates.\n\n"
+            f"Original plan:\n{truncate_context(plan_context, 3500)}\n\n"
+            f"Previous output excerpt:\n{truncate_context(raw_manifest, 1200)}"
+        )
+    return write_llm_red_team_tools(artifact_run_id, target, manifest)
+
+
+def _safe_recon_args(args: Any) -> list[str]:
+    recon_config = _red_team_config().get("recon")
+    if not isinstance(recon_config, dict):
+        raise ValueError("Missing red_team.recon config.")
+    blocked = {str(item) for item in recon_config.get("blocked_args", [])}
+    blocked_shell_tokens = [str(item) for item in recon_config.get("blocked_shell_tokens", [])]
+    required_service_detection_args = [str(item) for item in recon_config.get("required_service_detection_args", [])]
+    max_args = int(recon_config.get("max_args") or 12)
+    safe_args: list[str] = []
+    skip_next = False
+    for raw_arg in args if isinstance(args, list) else []:
+        if skip_next:
+            skip_next = False
+            continue
+        arg = str(raw_arg).strip()
+        if not arg or any(token in arg for token in blocked_shell_tokens):
+            continue
+        if arg in blocked:
+            skip_next = True
+            continue
+        if any(arg.startswith(f"{flag}=") for flag in blocked):
+            continue
+        if arg.startswith("-o") or arg.startswith("-iL"):
+            skip_next = True
+            continue
+        safe_args.append(arg)
+    if required_service_detection_args and not any(required in safe_args for required in required_service_detection_args):
+        expected = ", ".join(required_service_detection_args)
+        raise ValueError(f"Recon agent command manifest must include one configured service-detection arg: {expected}.")
+    return safe_args[:max_args]
+
+
+def _nmap_xml_to_scan(xml_path: Path, target: str, ports: str, manifest: dict[str, Any]) -> dict[str, Any]:
+    root = ET.parse(xml_path).getroot()
+    hosts: list[dict[str, Any]] = []
+    for host_node in root.findall("host"):
+        address_node = host_node.find("address")
+        host_id = address_node.attrib.get("addr", target) if address_node is not None else target
+        status_node = host_node.find("status")
+        host_status = status_node.attrib.get("state", "unknown") if status_node is not None else "unknown"
+        host_entry = {"host": host_id, "status": host_status, "ports": []}
+        for port_node in host_node.findall("./ports/port"):
+            state_node = port_node.find("state")
+            service_node = port_node.find("service")
+            state = state_node.attrib.get("state", "") if state_node is not None else ""
+            service = service_node.attrib if service_node is not None else {}
+            host_entry["ports"].append(
+                {
+                    "port": int(port_node.attrib.get("portid", "0") or 0),
+                    "protocol": port_node.attrib.get("protocol", "tcp"),
+                    "state": state,
+                    "service": service.get("name", ""),
+                    "product": service.get("product", ""),
+                    "version": service.get("version", ""),
+                    "extra_info": service.get("extrainfo", ""),
+                }
+            )
+        hosts.append(host_entry)
+    return {
+        "scanner": "red_team_recon_agent_dynamic_command",
+        "target": target,
+        "ports": ports,
+        "command_manifest": manifest,
+        "hosts": hosts,
+    }
+
+
+def run_dynamic_red_team_recon_stage(
+    artifact_run_id: int,
+    target: str,
+    ports: str,
+    timeout: int,
+) -> tuple[dict[str, Any], str, dict[str, Any], dict[str, Any]]:
+    local_context = previous_output_context(
+        ("nmap_scan.json", "red_team_used.json", "red_team_recon/manifest.json"),
+        max_runs=2,
+        chars_per_file=650,
+    )
+    recon_agent = AgentRegistry.get_agent("red_team_recon_agent")
+    manifest: dict[str, Any] = {}
+    raw_manifest = ""
+    retry_context = truncate_context(local_context, 1600)
+    for attempt in range(2):
+        recon_task = create_red_team_recon_tool_generation_task(
+            recon_agent,
+            target,
+            ports,
+            timeout,
+            retry_context,
+        )
+        raw_manifest = run_agent_task("red_team_recon_agent", recon_task)
+        try:
+            manifest = extract_json_object(raw_manifest)
+        except Exception:
+            manifest = {
+                "agent": "red_team_recon_agent",
+                "mode": "llm_generated_each_run",
+                "safety": "Recon command output could not be parsed as JSON.",
+                "raw_output": raw_manifest,
+            }
+        if str(manifest.get("tool", "")).lower() == "nmap":
+            break
+        retry_context = (
+            "Previous recon command manifest was invalid, truncated, or empty. "
+            "Return only a complete minified JSON object with tool=nmap and args array. No script body.\n\n"
+            f"Previous output excerpt:\n{truncate_context(raw_manifest, 1200)}"
+        )
+    if str(manifest.get("tool", "")).lower() != "nmap":
+        raise ValueError("Recon agent did not return a valid dynamic Nmap command manifest.")
+
+    recon_subdir = _red_team_artifact_name("recon_subdir")
+    current_recon_dir = _red_team_artifact_path("current_recon_dir").resolve()
+    tools_dir = (RUNS_DIR / f"run_{artifact_run_id:04d}" / recon_subdir).resolve()
+    if tools_dir.exists():
+        shutil.rmtree(tools_dir)
+    tools_dir.mkdir(parents=True, exist_ok=True)
+    if current_recon_dir.exists():
+        shutil.rmtree(current_recon_dir)
+    current_recon_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest = {
+        "agent": "red_team_recon_agent",
+        "mode": "llm_generated_each_run",
+        "safety": "Authorized bounded recon only.",
+        "tool": "nmap",
+        "target": target,
+        "ports": ports,
+        "args": _safe_recon_args(manifest.get("args", [])),
+        "timeout_seconds": int(manifest.get("timeout_seconds") or timeout),
+        "raw_agent_output": raw_manifest,
+    }
+    manifest_path = tools_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    current_manifest_path = current_recon_dir / "manifest.json"
+    current_manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    execution_dir = tools_dir / "execution"
+    execution_dir.mkdir(parents=True, exist_ok=True)
+    xml_path = execution_dir / "recon_nmap.xml"
+    gnmap_path = execution_dir / "recon_nmap.gnmap"
+    scan_path = execution_dir / "recon_scan.json"
+    stdout_path = execution_dir / "dynamic_recon.stdout.txt"
+    stderr_path = execution_dir / "dynamic_recon.stderr.txt"
+    command = [
+        "nmap",
+        *manifest["args"],
+        "-p",
+        ports,
+        "-oX",
+        str(xml_path),
+        "-oG",
+        str(gnmap_path),
+        target,
+    ]
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
+        stdout = completed.stdout
+        stderr = completed.stderr
+        returncode = completed.returncode
+        status = "ok" if returncode == 0 else "failed"
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        returncode = 124
+        status = "timeout"
+    stdout_path.write_text(stdout, encoding="utf-8")
+    stderr_path.write_text(stderr, encoding="utf-8")
+    if status != "ok" or not xml_path.exists():
+        raise RuntimeError(
+            "Dynamic recon command failed before XML normalization. "
+            f"Status: {status}. Stderr: {truncate_context(stderr, 1200) or 'empty'}"
+        )
+
+    scan = _nmap_xml_to_scan(xml_path, target, ports, manifest)
+    scan_path.write_text(json.dumps(scan, indent=2), encoding="utf-8")
+    execution = {
+        "mode": "execute",
+        "tools_dir": str(tools_dir),
+        "execution_dir": str(execution_dir),
+        "timeout_seconds": timeout,
+        "command": command,
+        "results": [
+            {
+                "script": "dynamic_recon_command",
+                "domain": "recon",
+                "agent": "red_team_recon_agent",
+                "status": status,
+                "returncode": returncode,
+                "stdout_path": str(stdout_path),
+                "stderr_path": str(stderr_path),
+                "dependencies": ["nmap"],
+            }
+        ],
+    }
+    results_path = execution_dir / "execution_results.json"
+    execution["results_path"] = str(results_path)
+    results_path.write_text(json.dumps(execution, indent=2), encoding="utf-8")
+    recon_artifacts = {
+        "tools_dir": tools_dir,
+        "manifest_path": manifest_path,
+        "current_tools_dir": current_recon_dir,
+        "current_manifest_path": current_manifest_path,
+        "scripts_dir": tools_dir,
+        "current_scripts_dir": current_recon_dir,
+        "manifest": manifest,
+    }
+    nmap_output = stdout.strip() or json.dumps(scan, indent=2)
+    return scan, nmap_output, recon_artifacts, execution
+
+
+def execute_red_team_tools(
+    tool_artifacts: dict[str, Any],
+    timeout: int = 180,
+    active_args: list[str] | None = None,
+) -> dict[str, Any]:
     tools_dir = Path(tool_artifacts["tools_dir"])
     execution_dir = tools_dir / "execution"
     if execution_dir.exists():
@@ -420,11 +487,15 @@ def execute_red_team_tools(tool_artifacts: dict[str, Any], timeout: int = 180) -
     env = {"OUT_DIR": str(execution_dir), **dict()}
     for script in tool_artifacts["manifest"].get("scripts", []):
         path = Path(script["path"])
+        script_args = script.get("active_args", active_args or [])
+        if not isinstance(script_args, list):
+            script_args = []
+        command = [str(path), str(execution_dir), *[str(arg) for arg in script_args]]
         stdout_path = execution_dir / f"{path.stem}.stdout.txt"
         stderr_path = execution_dir / f"{path.stem}.stderr.txt"
         try:
             completed = subprocess.run(
-                [str(path)],
+                command,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
@@ -449,6 +520,7 @@ def execute_red_team_tools(tool_artifacts: dict[str, Any], timeout: int = 180) -
                 "agent": script.get("agent", "red_team_tool_generation_agent"),
                 "status": status,
                 "returncode": returncode,
+                "command": command,
                 "stdout_path": str(stdout_path),
                 "stderr_path": str(stderr_path),
                 "dependencies": script.get("dependencies", []),
@@ -461,131 +533,121 @@ def execute_red_team_tools(tool_artifacts: dict[str, Any], timeout: int = 180) -
     return results
 
 
-def _script_for_domain(domain: str, target: str, scan: dict[str, Any], plan: dict[str, Any]) -> tuple[str, str, list[str]]:
-    if domain == "web":
-        return "redteam_web_checks", _web_checks_script(target, scan), ["curl"]
-    if domain == "linux":
-        return "redteam_linux_checks", _linux_checks_script(target, plan), ["nc"]
-    if domain == "windows":
-        return "redteam_windows_checks", _windows_checks_script(target, scan), ["smbclient", "nc"]
-    if domain == "blockchain":
-        return "redteam_blockchain_checks", _blockchain_checks_script(target, scan), ["curl"]
-    raise ValueError(f"Unsupported red-team domain: {domain}")
+def _read_short_file(path_value: Any, limit: int = 900) -> str:
+    path = Path(str(path_value or ""))
+    if not path.exists():
+        return ""
+    return truncate_context(path.read_text(encoding="utf-8", errors="replace").strip(), limit)
 
 
-def generate_specialist_tools(
-    artifact_run_id: int,
-    domain: str,
-    target: str,
-    scan: dict[str, Any],
-    plan: dict[str, Any],
-) -> dict[str, Any]:
-    tools_dir = RUNS_DIR / f"run_{artifact_run_id:04d}" / f"{domain}_agent"
-    if tools_dir.exists():
-        shutil.rmtree(tools_dir)
-    tools_dir.mkdir(parents=True, exist_ok=True)
+def build_human_execution_summary(execution: dict[str, Any] | None) -> dict[str, Any]:
+    if not execution:
+        return {
+            "headline": "Generated scripts were not executed.",
+            "status": "not_executed",
+            "scripts_total": 0,
+            "scripts_ok": 0,
+            "scripts_failed": 0,
+            "active_validation": False,
+            "confirmed_findings": [],
+            "script_results": [],
+        }
 
-    agent_name = RED_TEAM_SPECIALISTS[domain]
-    script_name, script_body, dependencies = _script_for_domain(domain, target, scan, plan)
-    script_path = tools_dir / f"{script_name}.sh"
-    _write_executable(script_path, script_body)
-
-    domain_plan = {
-        **plan,
-        "candidate_count": len([item for item in plan.get("candidates", []) if item.get("domain") == domain]),
-        "candidates": [item for item in plan.get("candidates", []) if item.get("domain") == domain],
-        "specialists": {domain: plan.get("specialists", {}).get(domain, {})},
-    }
-    rc_path = None
-    domain_candidates = domain_plan["candidates"]
-    if domain_candidates:
-        rc_path = tools_dir / f"{domain}_metasploit_validation.rc"
-        rc_path.write_text(_metasploit_resource({**domain_plan, "candidates": domain_candidates}), encoding="utf-8")
-
-    manifest = {
-        "agent": agent_name,
-        "domain": domain,
-        "target": target,
-        "mode": "single_agent",
-        "safety": "Focused validation for one requested specialist only.",
-        "scripts": [
+    script_results = []
+    confirmed_findings = extract_confirmed_exploits(execution)
+    active_validation = False
+    dry_run_outputs = 0
+    for item in execution.get("results", []):
+        stdout = _read_short_file(item.get("stdout_path"))
+        stderr = _read_short_file(item.get("stderr_path"), 500)
+        command = [str(part) for part in item.get("command", [])]
+        if "--execute" in command:
+            active_validation = True
+        if "[DRY-RUN]" in stdout:
+            dry_run_outputs += 1
+        script_results.append(
             {
-                "name": script_name,
-                "filename": script_path.name,
-                "path": str(script_path),
-                "domain": domain,
-                "agent": agent_name,
-                "dependencies": dependencies,
-            }
-        ],
-    }
-    if rc_path:
-        manifest["metasploit_resource"] = str(rc_path)
-
-    manifest_path = tools_dir / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    return {
-        "tools_dir": tools_dir,
-        "manifest_path": manifest_path,
-        "manifest": manifest,
-        "domain_plan": domain_plan,
-    }
-
-
-def execute_specialist_tools(tool_artifacts: dict[str, Any], timeout: int = 180) -> dict[str, Any]:
-    tools_dir = Path(tool_artifacts["tools_dir"])
-    execution_dir = tools_dir / "execution"
-    if execution_dir.exists():
-        shutil.rmtree(execution_dir)
-    execution_dir.mkdir(parents=True, exist_ok=True)
-
-    results = {
-        "mode": "execute",
-        "execution_dir": str(execution_dir),
-        "timeout_seconds": timeout,
-        "results": [],
-    }
-    for script in tool_artifacts["manifest"].get("scripts", []):
-        path = Path(script["path"])
-        stdout_path = execution_dir / f"{path.stem}.stdout.txt"
-        stderr_path = execution_dir / f"{path.stem}.stderr.txt"
-        try:
-            completed = subprocess.run(
-                [str(path)],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,
-                env={**__import__("os").environ, "OUT_DIR": str(execution_dir)},
-            )
-            status = "ok" if completed.returncode == 0 else "skipped" if completed.returncode == 20 else "failed"
-            stdout = completed.stdout
-            stderr = completed.stderr
-            returncode = completed.returncode
-        except subprocess.TimeoutExpired as exc:
-            status = "timeout"
-            stdout = exc.stdout or ""
-            stderr = exc.stderr or ""
-            returncode = 124
-
-        stdout_path.write_text(stdout, encoding="utf-8")
-        stderr_path.write_text(stderr, encoding="utf-8")
-        results["results"].append(
-            {
-                "script": script["filename"],
-                "domain": script["domain"],
-                "agent": script["agent"],
-                "status": status,
-                "returncode": returncode,
-                "stdout_path": str(stdout_path),
-                "stderr_path": str(stderr_path),
+                "script": item.get("script"),
+                "status": item.get("status"),
+                "returncode": item.get("returncode"),
+                "active_args": [arg for arg in command if arg.startswith("--")],
+                "observation": stdout or stderr or "No output captured.",
+                "stderr": stderr,
             }
         )
 
-    results_path = execution_dir / "execution_results.json"
-    results["results_path"] = str(results_path)
-    results_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
-    return results
+    scripts_total = len(script_results)
+    scripts_ok = sum(1 for item in script_results if item.get("status") == "ok")
+    scripts_failed = sum(1 for item in script_results if item.get("status") in {"failed", "timeout"})
+    if confirmed_findings:
+        headline = f"{len(confirmed_findings)} confirmed validation finding(s)."
+    elif scripts_total and scripts_ok == scripts_total:
+        headline = "All generated scripts ran, but no exploit was confirmed."
+    elif scripts_failed:
+        headline = "Some generated scripts failed or timed out."
+    else:
+        headline = "No generated scripts ran."
+
+    return {
+        "headline": headline,
+        "status": red_team_execution_status(execution),
+        "scripts_total": scripts_total,
+        "scripts_ok": scripts_ok,
+        "scripts_failed": scripts_failed,
+        "active_validation": active_validation,
+        "dry_run_outputs": dry_run_outputs,
+        "confirmed_findings": confirmed_findings,
+        "script_results": script_results,
+    }
+
+
+def render_human_execution_summary(summary: dict[str, Any]) -> str:
+    lines = [
+        "## Human-Readable Execution Result",
+        "",
+        summary.get("headline", "No summary available."),
+        "",
+        f"- Status: `{summary.get('status', 'unknown')}`",
+        f"- Scripts run: `{summary.get('scripts_ok', 0)}/{summary.get('scripts_total', 0)}`",
+        f"- Failed or timed out: `{summary.get('scripts_failed', 0)}`",
+        f"- Active validation requested: `{bool(summary.get('active_validation'))}`",
+    ]
+    if summary.get("dry_run_outputs"):
+        lines.append(f"- Scripts that still printed dry-run output: `{summary.get('dry_run_outputs')}`")
+    lines.extend(["", "### Script Observations", ""])
+    for item in summary.get("script_results", []):
+        lines.append(f"- `{item.get('script')}`: `{item.get('status')}` rc={item.get('returncode')}")
+        observation = str(item.get("observation") or "No output captured.")
+        for line in observation.splitlines()[:8]:
+            lines.append(f"  {line}")
+        if item.get("stderr"):
+            lines.append("  stderr:")
+            for line in str(item["stderr"]).splitlines()[:4]:
+                lines.append(f"  {line}")
+    if not summary.get("script_results"):
+        lines.append("- No script output available.")
+    if summary.get("confirmed_findings"):
+        lines.extend(["", "### Confirmed Findings", ""])
+        for finding in summary["confirmed_findings"]:
+            lines.append(f"- {finding}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def red_team_execution_status(execution: dict[str, Any] | None) -> str:
+    if not execution:
+        return "not_executed"
+    statuses = {item.get("status") for item in execution.get("results", [])}
+    if statuses == {"ok"}:
+        return "success"
+    if "timeout" in statuses:
+        return "timeout"
+    if "failed" in statuses and "ok" in statuses:
+        return "partial_failure"
+    if "failed" in statuses:
+        return "failed"
+    if "skipped" in statuses:
+        return "partial_skipped"
+    return "unknown"
 
 
 def extract_confirmed_exploits(execution: dict[str, Any] | None) -> list[str]:
@@ -603,65 +665,9 @@ def extract_confirmed_exploits(execution: dict[str, Any] | None) -> list[str]:
     return findings
 
 
-def build_executive_summary(
-    target: str,
-    domain: str,
-    plan: dict[str, Any],
-    execution: dict[str, Any] | None,
-    nmap_source: str,
-) -> str:
-    candidates = plan.get("candidates", [])
-    executed = execution.get("results", []) if execution else []
-    working_exploits = extract_confirmed_exploits(execution)
-    skipped: list[str] = []
-    failed: list[str] = []
-    for item in executed:
-        if item.get("status") == "ok":
-            # Domain scripts are validation checks, not confirmed exploit shells.
-            continue
-        if item.get("status") == "skipped":
-            skipped.append(f"{item.get('script')} skipped")
-        elif item.get("status") in {"failed", "timeout"}:
-            failed.append(f"{item.get('script')} {item.get('status')}")
-
-    lines = [
-        "# Executive Summary",
-        "",
-        f"Target: `{target}`",
-        f"Specialist: `{domain}`",
-        f"Enumeration source: `{nmap_source}`",
-        "",
-        "## Result",
-        "",
-    ]
-    if working_exploits:
-        lines.extend(f"- Confirmed working exploit/validation: `{item}`" for item in working_exploits)
-    else:
-        lines.append("- No exploit was confirmed as working in this run.")
-
-    lines.extend(["", "## Candidate Exploits", ""])
-    if candidates:
-        for candidate in candidates:
-            lines.append(f"- `{candidate['name']}` on port `{candidate['port']}`: {candidate['reason']}")
-    else:
-        lines.append("- No exploit candidates for this specialist.")
-
-    lines.extend(["", "## Validation Checks", ""])
-    if executed:
-        for item in executed:
-            lines.append(f"- `{item['script']}`: `{item['status']}`")
-    else:
-        lines.append("- Validation scripts were generated but not executed.")
-
-    if skipped or failed:
-        lines.extend(["", "## Gaps", ""])
-        lines.extend(f"- {item}" for item in skipped + failed)
-    return "\n".join(lines).rstrip() + "\n"
-
-
 def run_red_team_specialist_pipeline(
     domain: str,
-    target: str = "172.17.0.2",
+    target: str,
     ports: str = "1-10000",
     timeout: int = 180,
     reuse_scan: str = "",
@@ -675,126 +681,128 @@ def run_red_team_specialist_pipeline(
 
     artifact_run_id = next_artifact_run_id()
     if reuse_scan:
-        scan, nmap_output = run_nmap_tool_stage(target, ports, timeout, reuse_scan)
+        scan, nmap_output = run_nmap_stage(target, ports, timeout, reuse_scan)
         nmap_source = f"reused scan: {reuse_scan}"
-    elif use_nmap_agent:
-        scan, nmap_output = run_nmap_stage(target, ports, timeout)
-        nmap_source = "nmap_scan_agent"
+        recon_artifacts = None
+        recon_execution = None
     else:
-        scan, nmap_output = run_nmap_tool_stage(target, ports, timeout)
-        nmap_source = "nmap_tool"
-
-    vulnerability_scan, vulnerability_context = run_vulnerability_tool_stage(scan)
-    plan = build_exploit_plan(target, scan, vulnerability_scan)
-    domain_plan = {
-        **plan,
-        "candidate_count": len([item for item in plan["candidates"] if item.get("domain") == domain]),
-        "candidates": [item for item in plan["candidates"] if item.get("domain") == domain],
-        "specialists": {domain: plan["specialists"][domain]},
-    }
-
-    agent_output = ""
-    if use_llm_agent:
-        agent_name = RED_TEAM_SPECIALISTS[domain]
-        agent = AgentRegistry.get_agent(agent_name)
-        task = RED_TEAM_SPECIALIST_TASKS[domain](
-            agent,
+        scan, nmap_output, recon_artifacts, recon_execution = run_dynamic_red_team_recon_stage(
+            artifact_run_id,
             target,
-            json.dumps(scan, indent=2),
-            vulnerability_context,
+            ports,
+            timeout,
         )
-        agent_output = run_agent_task(agent_name, task)
+        nmap_source = "red_team_recon_agent_dynamic_command"
 
-    tool_artifacts = generate_specialist_tools(artifact_run_id, domain, target, scan, domain_plan)
-    execution = execute_specialist_tools(tool_artifacts, execution_timeout) if execute else None
+    vulnerability_scan, vulnerability_context = run_vulnerability_stage(scan)
+    scan_context = json.dumps(scan, indent=2)
+    local_context = previous_output_context(_red_team_previous_context_files(), max_runs=2, chars_per_file=650)
+
+    specialist_spec = _red_team_specialist_config()[domain]
+    agent_name = specialist_spec["agent"]
+    agent = AgentRegistry.get_agent(agent_name)
+    task = TaskRegistry.get_task(
+        specialist_spec["planning_task"],
+        agent=agent,
+        target=target,
+        scan_context=truncate_context(scan_context, 2200),
+        vulnerability_context=(
+            truncate_context(vulnerability_context, 1800)
+            + "\n\nLocal context:\n"
+            + truncate_context(local_context, 1400)
+        ),
+    )
+    agent_output = run_agent_task(agent_name, task)
+
+    tool_artifacts = run_red_team_tool_generation_stage(
+        artifact_run_id,
+        target,
+        truncate_context(scan_context, 2200),
+        f"Specialist domain: {domain}\n\n{agent_output}",
+    )
+    execution = (
+        execute_red_team_tools(tool_artifacts, execution_timeout, _red_team_generated_tool_active_args())
+        if execute
+        else None
+    )
     working_exploits = extract_confirmed_exploits(execution)
-    summary = build_executive_summary(target, domain, domain_plan, execution, nmap_source)
+    human_summary = build_human_execution_summary(execution)
+    human_result_text = render_human_execution_summary(human_summary)
+    summary_lines = [
+        "# Executive Summary",
+        "",
+        f"Target: `{target}`",
+        f"Specialist: `{domain}`",
+        f"Enumeration source: `{nmap_source}`",
+        "",
+        "## Specialist Plan",
+        "",
+        agent_output,
+        "",
+        "## Validation Scripts",
+        "",
+    ]
+    if tool_artifacts["manifest"].get("scripts"):
+        for script in tool_artifacts["manifest"]["scripts"]:
+            summary_lines.append(f"- `{script['filename']}`: {script.get('purpose', 'LLM-generated validation script')}")
+    else:
+        summary_lines.append("- No scripts were generated.")
+    summary_lines.extend(["", "## Execution", ""])
+    summary_lines.append(human_result_text)
+    summary_lines.extend(["", "## Raw Execution JSON", ""])
+    summary_lines.append(json.dumps(execution or {"status": "not_executed"}, indent=2))
+    summary = "\n".join(summary_lines).rstrip() + "\n"
 
     run_dir = Path(tool_artifacts["tools_dir"])
     result_path = run_dir / "result.json"
     summary_path = run_dir / "executive_summary.md"
+    human_result_path = run_dir / "human_result.md"
     scan_path = run_dir / "nmap_scan.json"
     nmap_output_path = run_dir / "nmap_output.txt"
     scan_path.write_text(json.dumps(scan, indent=2), encoding="utf-8")
     nmap_output_path.write_text(nmap_output, encoding="utf-8")
     summary_path.write_text(summary, encoding="utf-8")
+    human_result_path.write_text(human_result_text, encoding="utf-8")
 
     result = {
         "status": "complete",
         "artifact_run_id": artifact_run_id,
         "domain": domain,
-        "agent": RED_TEAM_SPECIALISTS[domain],
+        "agent": agent_name,
         "target": target,
         "nmap_source": nmap_source,
-        "candidate_count": domain_plan["candidate_count"],
-        "candidates": domain_plan["candidates"],
+        "candidate_count": None,
+        "candidates": [],
         "execute": execute,
         "execution": execution,
+        "execution_status": red_team_execution_status(execution),
+        "human_summary": human_summary,
         "working_exploits": working_exploits,
         "executive_summary": summary,
         "agent_output": agent_output,
+        "generated_scripts": tool_artifacts["manifest"],
         "artifacts": {
             "run_dir": str(run_dir),
             "result": str(result_path),
             "executive_summary": str(summary_path),
+            "human_result": str(human_result_path),
             "tool_manifest": str(tool_artifacts["manifest_path"]),
             "nmap_scan": str(scan_path),
             "nmap_output": str(nmap_output_path),
         },
     }
+    if recon_artifacts:
+        result["artifacts"]["red_team_recon_manifest"] = str(recon_artifacts["manifest_path"])
+    if recon_execution:
+        result["artifacts"]["red_team_recon_execution_results"] = recon_execution["results_path"]
     if execution:
         result["artifacts"]["execution_results"] = execution["results_path"]
     result_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
     return result
 
 
-def build_red_team_report(target: str, service_summary: str, plan: dict[str, Any], execution: dict[str, Any] | None) -> str:
-    lines = [
-        "# Red Team Validation Report",
-        "",
-        f"Target: `{target}`",
-        "",
-        "## Enumeration Summary",
-        "",
-        "```text",
-        service_summary,
-        "```",
-        "",
-        "## Specialist Coverage",
-        "",
-    ]
-    for domain, summary in plan.get("specialists", {}).items():
-        lines.append(
-            f"- `{domain}` via `{summary.get('agent')}`: `{summary.get('candidate_count', 0)}` candidate(s)"
-        )
-    lines.extend(["", "## Candidate Exploit Validations", ""])
-    if not plan.get("candidates"):
-        lines.append("No high-confidence exploit validation candidates were generated from the scan.")
-    for candidate in plan.get("candidates", []):
-        lines.append(
-            f"- `{candidate['domain']}`: `{candidate['name']}` on port `{candidate['port']}` using `{candidate['metasploit_module']}`: {candidate['reason']}"
-        )
-    lines.extend(["", "## Execution Results", ""])
-    if not execution:
-        lines.append("Generated tools were not executed. Re-run with `--execute` for active validation.")
-    else:
-        for item in execution.get("results", []):
-            lines.append(f"- `{item['script']}`: `{item['status']}` (return code `{item['returncode']}`)")
-    lines.extend(
-        [
-            "",
-            "## Safety Bounds",
-            "",
-            "- Authorized lab target only.",
-            "- No persistence, credential theft, or destructive actions are included.",
-            "- Metasploit sessions are listed then killed by the generated resource file.",
-        ]
-    )
-    return "\n".join(lines).rstrip() + "\n"
-
-
 def run_red_team_pipeline(
-    target: str = "172.17.0.2",
+    target: str,
     ports: str = "1-10000",
     timeout: int = 180,
     reuse_scan: str = "",
@@ -803,97 +811,95 @@ def run_red_team_pipeline(
     execution_timeout: int = 180,
 ) -> dict[str, Any]:
     artifact_run_id = next_artifact_run_id()
-    if use_agents:
+    if reuse_scan:
         scan, nmap_output = run_nmap_stage(target, ports, timeout, reuse_scan)
-        vulnerability_scan, vulnerability_output = run_vulnerability_stage(scan)
+        nmap_source = f"reused scan: {reuse_scan}"
+        recon_artifacts = None
+        recon_execution = None
     else:
-        scan, nmap_output = run_nmap_tool_stage(target, ports, timeout, reuse_scan)
-        vulnerability_scan, vulnerability_output = run_vulnerability_tool_stage(scan)
+        scan, nmap_output, recon_artifacts, recon_execution = run_dynamic_red_team_recon_stage(
+            artifact_run_id,
+            target,
+            ports,
+            timeout,
+        )
+        nmap_source = "red_team_recon_agent_dynamic_command"
+    vulnerability_scan, vulnerability_output = run_vulnerability_stage(scan)
 
     service_summary = summarize_services(scan)
-    deterministic_plan = build_exploit_plan(target, scan, vulnerability_scan)
-    plan_text = json.dumps(deterministic_plan, indent=2)
+    scan_context = json.dumps(scan, indent=2)
+    local_context = previous_output_context(_red_team_previous_context_files(), max_runs=2, chars_per_file=650)
 
-    agents_used = [
-        "red_team_recon_agent",
-        "red_team_exploit_planner_agent",
-        *RED_TEAM_SPECIALISTS.values(),
-        "red_team_tool_generation_agent",
-        "red_team_reporting_agent",
-    ]
-    tools_used = [
-        "nmap_tool",
-        "vulnerability_scan_tool",
-        "exploitdb_tool",
-        "knowledge_base_tool",
-        "generated_red_team_tools",
-    ]
+    agents_used = _red_team_pipeline_agents()
+    tools_used = sorted(
+        {tool for agent_name in agents_used for tool in configured_tool_names(agent_name)}
+        | {"llm_generated_red_team_tools"}
+    )
 
-    if use_agents:
-        specialist_outputs = {}
-        for domain, agent_name in RED_TEAM_SPECIALISTS.items():
-            specialist_agent = AgentRegistry.get_agent(agent_name)
-            specialist_task = RED_TEAM_SPECIALIST_TASKS[domain](
-                specialist_agent,
-                target,
-                json.dumps(scan, indent=2),
-                vulnerability_output,
-            )
-            specialist_outputs[domain] = run_agent_task(agent_name, specialist_task)
+    planner = AgentRegistry.get_agent("red_team_exploit_planner_agent")
+    planning_task = create_red_team_exploit_planning_task(
+        planner,
+        target,
+        truncate_context(scan_context, 2200),
+        truncate_context(vulnerability_output, 2000),
+        truncate_context(local_context, 1800),
+    )
+    plan_text = run_agent_task("red_team_exploit_planner_agent", planning_task)
 
-        planner = AgentRegistry.get_agent("red_team_exploit_planner_agent")
-        planning_task = create_red_team_exploit_planning_task(
-            planner,
-            target,
-            json.dumps(scan, indent=2),
-            vulnerability_output + "\n\nSpecialist outputs:\n" + json.dumps(specialist_outputs, indent=2),
-        )
-        plan_text = run_agent_task("red_team_exploit_planner_agent", planning_task)
-        specialist_path = RUNS_DIR / f"run_{artifact_run_id:04d}" / "red_team_specialist_outputs.json"
-        specialist_path.parent.mkdir(parents=True, exist_ok=True)
-        specialist_path.write_text(json.dumps(specialist_outputs, indent=2), encoding="utf-8")
-
-    tool_artifacts = generate_red_team_tools(artifact_run_id, target, ports, scan, deterministic_plan)
-    execution = execute_red_team_tools(tool_artifacts, execution_timeout) if execute else None
-    execution_context = json.dumps(execution or {"status": "not_executed"}, indent=2)
-    report = build_red_team_report(target, service_summary, deterministic_plan, execution)
-
-    if use_agents:
-        reporter = AgentRegistry.get_agent("red_team_reporting_agent")
-        report_task = create_red_team_reporting_task(
-            reporter,
-            target,
-            json.dumps(scan, indent=2),
-            plan_text,
-            execution_context,
-        )
-        report = run_agent_task("red_team_reporting_agent", report_task)
+    tool_artifacts = run_red_team_tool_generation_stage(
+        artifact_run_id,
+        target,
+        truncate_context(scan_context, 2200),
+        truncate_context(plan_text, 3500),
+    )
+    execution = (
+        execute_red_team_tools(tool_artifacts, execution_timeout, _red_team_generated_tool_active_args())
+        if execute
+        else None
+    )
+    human_summary = build_human_execution_summary(execution)
+    human_result_text = render_human_execution_summary(human_summary)
+    execution_context = human_result_text
+    reporter = AgentRegistry.get_agent("red_team_reporting_agent")
+    report_task = create_red_team_reporting_task(
+        reporter,
+        target,
+        truncate_context(scan_context, 1800),
+        truncate_context(plan_text, 2500),
+        truncate_context(execution_context, 1200),
+    )
+    report = run_agent_task("red_team_reporting_agent", report_task)
 
     run_dir = RUNS_DIR / f"run_{artifact_run_id:04d}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    plan_path = run_dir / "red_team_plan.json"
-    plan_path.write_text(json.dumps(deterministic_plan, indent=2), encoding="utf-8")
+    plan_path = run_dir / "red_team_plan.md"
+    plan_path.write_text(plan_text.rstrip() + "\n", encoding="utf-8")
     report_path = run_dir / "red_team_report.md"
     report_path.write_text(report, encoding="utf-8")
+    human_result_path = run_dir / "human_result.md"
+    human_result_path.write_text(human_result_text, encoding="utf-8")
     used_path = run_dir / "red_team_used.json"
     used = {
         "agents": agents_used,
         "tools": tools_used,
         "scripts": tool_artifacts["manifest"]["scripts"],
-        "metasploit_resource": tool_artifacts["manifest"]["metasploit_resource"],
-        "specialists": deterministic_plan.get("specialists", {}),
+        "nmap_source": nmap_source,
         "artifacts": {
             "run_dir": str(run_dir),
             "red_team_plan": str(plan_path),
             "red_team_report": str(report_path),
+            "human_result": str(human_result_path),
             "red_team_tools_manifest": str(tool_artifacts["manifest_path"]),
             "current_red_team_tools": str(tool_artifacts["current_tools_dir"]),
         },
     }
+    if recon_artifacts:
+        used["artifacts"]["red_team_recon_manifest"] = str(recon_artifacts["manifest_path"])
+        used["artifacts"]["current_red_team_recon"] = str(recon_artifacts["current_tools_dir"])
+    if recon_execution:
+        used["artifacts"]["red_team_recon_execution_results"] = recon_execution["results_path"]
     if execution:
         used["artifacts"]["execution_results"] = execution["results_path"]
-    if use_agents:
-        used["artifacts"]["specialist_outputs"] = str(specialist_path)
     used_path.write_text(json.dumps(used, indent=2), encoding="utf-8")
 
     # Also write the common artifact files so this run looks like the threat-intel runs.
@@ -907,8 +913,12 @@ def run_red_team_pipeline(
         service_summary,
         vulnerability_output,
         report,
+        plan_text,
         "Red-team remediation is intentionally not generated by this pipeline.",
+        report,
         nmap_output,
+        tool_artifacts,
+        execution,
     )
 
     return {
@@ -916,13 +926,18 @@ def run_red_team_pipeline(
         "artifact_run_id": artifact_run_id,
         "target": target,
         "ports": ports,
-        "candidate_count": deterministic_plan["candidate_count"],
+        "nmap_source": nmap_source,
+        "candidate_count": None,
         "execute": execute,
         "agents_used": agents_used,
         "tools_used": tools_used,
         "artifacts": used["artifacts"],
+        "recon_execution": recon_execution,
         "execution": execution,
-        "plan": deterministic_plan,
+        "execution_status": red_team_execution_status(execution),
+        "human_summary": human_summary,
+        "plan": plan_text,
+        "generated_scripts": tool_artifacts["manifest"],
     }
 
 

@@ -8,10 +8,6 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
 import agents.intel_agents  # noqa: F401 - registers core agents
-import agents.red_team_blockchain_agent  # noqa: F401 - registers red-team blockchain agent
-import agents.red_team_linux_agent  # noqa: F401 - registers red-team linux agent
-import agents.red_team_web_agent  # noqa: F401 - registers red-team web agent
-import agents.red_team_windows_agent  # noqa: F401 - registers red-team windows agent
 from agents.registry import AgentRegistry
 from crew_red_team import RED_TEAM_SPECIALISTS, run_red_team_pipeline, run_red_team_specialist_pipeline
 from crew_threat_intel import DEFAULT_DB_PATH, run_threat_intel_pipeline
@@ -21,58 +17,58 @@ app = FastAPI(title="CrewAI SOC Threat Intelligence API")
 
 
 class ThreatIntelRunRequest(BaseModel):
-    target: str = Field(default="172.17.0.2", description="Authorized lab target.")
-    ports: str = Field(default="1-10000", description="Nmap port expression.")
-    timeout: int = Field(default=180, ge=1, le=1200, description="Nmap timeout in seconds.")
+    target: str = Field(..., description="Authorized lab target.")
+    ports: str = Field(default="1-10000", description="Port scope metadata for the provided evidence.")
+    timeout: int = Field(default=180, ge=1, le=1200, description="Agent task timeout hint in seconds.")
     db_path: str = Field(default=str(DEFAULT_DB_PATH), description="SQLite output DB path.")
-    reuse_scan: str = Field(default="", description="Optional existing Nmap JSON path.")
-    use_agents: bool = Field(
-        default=False,
-        description="Run CrewAI LLM reporting agents. Default false uses the faster deterministic tool-only path.",
-    )
+    reuse_scan: str = Field(default="", description="Required existing collection/evidence JSON path.")
     include_full_output: bool = Field(
         default=False,
         description="Return full reports inline. Default false returns compact metadata and artifact paths.",
     )
     auto_execute_remediation: bool = Field(
         default=True,
-        description="Automatically execute generated remediation scripts after each run.",
+        description="Automatically execute LLM-generated tool scripts after each run.",
+    )
+    include_remediation_plan: bool = Field(
+        default=True,
+        description="Run the response/remediation planning and generated remediation script stages.",
     )
     auto_apply_remediation: bool = Field(
         default=False,
-        description="Run generated remediation scripts with --apply. Default false executes dry-run only.",
+        description="Run LLM-generated tool scripts with --apply. Default false executes dry-run only.",
     )
     remediation_timeout: int = Field(
         default=120,
         ge=1,
         le=1200,
-        description="Timeout in seconds for each generated remediation script.",
+        description="Timeout in seconds for each generated tool script.",
     )
 
 
 class RedTeamRunRequest(BaseModel):
-    target: str = Field(default="172.17.0.2", description="Authorized lab target.")
+    target: str = Field(..., description="Authorized lab target.")
     ports: str = Field(default="1-10000", description="Nmap port expression.")
     timeout: int = Field(default=180, ge=1, le=1200, description="Nmap timeout in seconds.")
     reuse_scan: str = Field(default="", description="Optional existing Nmap JSON path.")
-    use_agents: bool = Field(default=False, description="Use LLM specialist/reporting agents.")
+    use_agents: bool = Field(default=True, description="Deprecated compatibility field; red-team runs use LLM agents.")
     execute: bool = Field(default=False, description="Execute generated red-team validation scripts.")
     execution_timeout: int = Field(default=180, ge=1, le=1200, description="Timeout per generated script.")
 
 
 class RedTeamAgentRunRequest(BaseModel):
-    target: str = Field(default="172.17.0.2", description="Authorized lab target.")
-    domain: str = Field(default="web", description="One of: web, linux, windows, blockchain.")
+    target: str = Field(..., description="Authorized lab target.")
+    domain: str = Field(..., description="One of: web, linux, windows, blockchain.")
     ports: str = Field(default="1-10000", description="Nmap port expression if reuse_scan is not provided.")
     timeout: int = Field(default=180, ge=1, le=1200, description="Nmap timeout in seconds.")
     reuse_scan: str = Field(default="", description="Optional existing Nmap JSON path.")
     use_nmap_agent: bool = Field(
         default=True,
-        description="Call nmap_scan_agent for fresh enumeration unless reuse_scan is provided.",
+        description="Deprecated compatibility field; collection uses configured agent/database flow unless reuse_scan is provided.",
     )
     use_llm_agent: bool = Field(
-        default=False,
-        description="Run the actual CrewAI specialist agent for narrative planning.",
+        default=True,
+        description="Deprecated compatibility field; specialist runs use the CrewAI specialist agent.",
     )
     execute: bool = Field(default=False, description="Execute only this specialist's generated validation script.")
     execution_timeout: int = Field(default=180, ge=1, le=1200, description="Timeout for the specialist script.")
@@ -104,10 +100,12 @@ def _compact_run_response(result: dict[str, Any]) -> dict[str, Any]:
         "open_port_count": len(open_ports),
         "open_ports": open_ports,
         "service_summary": result.get("service_summary"),
+        "correlation_report": result.get("correlation_report"),
+        "prediction_report": result.get("prediction_report"),
         "db_path": result.get("db_path"),
         "artifacts": result.get("artifacts"),
-        "integrated_tools": result.get("integrated_tools"),
         "generated_scripts": result.get("generated_scripts"),
+        "remediation_plan_excluded": result.get("remediation_plan_excluded"),
         "remediation_execution_status": result.get("remediation_execution_status"),
         "remediation_summary": result.get("remediation_summary"),
         "remediation_execution": result.get("remediation_execution"),
@@ -144,7 +142,7 @@ def run_threat_intel(request: ThreatIntelRunRequest) -> dict[str, Any]:
             timeout=request.timeout,
             db_path=request.db_path,
             reuse_scan=request.reuse_scan,
-            use_agents=request.use_agents,
+            include_remediation_plan=request.include_remediation_plan,
             auto_execute_remediation=request.auto_execute_remediation,
             auto_apply_remediation=request.auto_apply_remediation,
             remediation_timeout=request.remediation_timeout,

@@ -1,6 +1,5 @@
 import argparse
 import json
-import os
 import re
 import shutil
 import sqlite3
@@ -14,19 +13,14 @@ from crewai import Crew, Process
 import agents.intel_agents  # noqa: F401 - registers threat-intel agents
 from agents.registry import AgentRegistry
 from tasks.intel_tasks import (
+    create_correlation_task,
     create_nmap_scan_task,
+    create_prediction_task,
     create_remediation_task,
     create_reporting_task,
+    create_tool_generation_task,
     create_vulnerability_scan_task,
 )
-from tools.nmap_tool import run_nmap_scan
-from tools.vulnerability_scan_tool import vulnerability_scan_from_nmap
-import tools.misp_tool  # noqa: F401 - registers misp_tool
-import tools.sigma_tool  # noqa: F401 - registers sigma_tool
-import tools.suricata_tool  # noqa: F401 - registers suricata_tool
-import tools.virustotal_tool  # noqa: F401 - registers virustotal_tool
-import tools.zeek_tool  # noqa: F401 - registers zeek_tool
-from tools.registry import ToolRegistry
 
 
 OUTPUT_DIR = Path("outputs")
@@ -58,14 +52,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--db-path", default=str(DEFAULT_DB_PATH), help="SQLite output path.")
     parser.add_argument("--reuse-scan", default="", help="Optional existing Nmap JSON file.")
     parser.add_argument(
-        "--tool-only",
-        action="store_true",
-        help="Skip LLM agents and generate deterministic reports from scan/tool evidence.",
-    )
-    parser.add_argument(
         "--no-auto-remediation",
         action="store_true",
-        help="Generate remediation scripts without automatically executing them.",
+        help="Generate tool scripts without automatically executing them.",
+    )
+    parser.add_argument(
+        "--skip-remediation-plan",
+        action="store_true",
+        help="Skip response/remediation planning and generated remediation scripts for this run.",
     )
     parser.add_argument(
         "--auto-apply-remediation",
@@ -100,6 +94,65 @@ def extract_json_object(text: str) -> dict[str, Any]:
     return json.loads(match.group(0))
 
 
+def salvage_generated_script_objects(text: str, max_scripts: int = 2) -> list[dict[str, Any]]:
+    scripts: list[dict[str, Any]] = []
+    decoder = json.JSONDecoder()
+    script_start = text.find('"scripts"')
+    if script_start == -1:
+        return scripts
+
+    scan_position = script_start
+    while len(scripts) < max_scripts:
+        object_start = text.find("{", scan_position)
+        if object_start == -1:
+            break
+        try:
+            candidate, object_end = decoder.raw_decode(text[object_start:])
+        except json.JSONDecodeError:
+            scan_position = object_start + 1
+            continue
+
+        scan_position = object_start + object_end
+        if not isinstance(candidate, dict):
+            continue
+        if not candidate.get("body"):
+            continue
+        candidate.setdefault("name", f"generated_tool_{len(scripts) + 1}")
+        candidate.setdefault("filename", f"{len(scripts) + 1:02d}_{candidate['name']}.sh")
+        candidate.setdefault("interpreter", "bash")
+        scripts.append(candidate)
+    return scripts
+
+
+def truncate_context(text: str, limit: int = 5000) -> str:
+    text = str(text or "")
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "\n\n[truncated for tool generation]"
+
+
+def previous_output_context(
+    filenames: tuple[str, ...],
+    max_runs: int = 3,
+    chars_per_file: int = 700,
+) -> str:
+    snippets = []
+    for run_dir in sorted(RUNS_DIR.glob("run_[0-9][0-9][0-9][0-9]"), reverse=True):
+        if len(snippets) >= max_runs * len(filenames):
+            break
+        for filename in filenames:
+            path = run_dir / filename
+            if not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace").strip()
+            if not text:
+                continue
+            snippets.append(f"[{run_dir.name}/{filename}]\n{truncate_context(text, chars_per_file)}")
+            if len(snippets) >= max_runs * len(filenames):
+                break
+    return "\n\n---\n\n".join(snippets)
+
+
 def summarize_services(scan: dict[str, Any]) -> str:
     lines = []
     for host in scan.get("hosts", []):
@@ -123,45 +176,70 @@ def run_nmap_stage(target: str, ports: str, timeout: int, reuse_scan: str = "") 
         scan = json.loads(Path(reuse_scan).read_text(encoding="utf-8"))
         return scan, json.dumps(scan, indent=2)
 
-    agent = AgentRegistry.get_agent("nmap_scan_agent")
+    agent = AgentRegistry.get_agent("collection_agent")
     task = create_nmap_scan_task(agent, target, ports, timeout)
-    raw_output = run_agent_task("nmap_scan_agent", task)
+    raw_output = run_agent_task("collection_agent", task)
     try:
         return extract_json_object(raw_output), raw_output
     except Exception:
-        fallback = json.loads(run_nmap_scan(target, "service", ports, timeout, True))
-        return fallback, json.dumps(fallback, indent=2)
-
-
-def run_nmap_tool_stage(
-    target: str,
-    ports: str,
-    timeout: int,
-    reuse_scan: str = "",
-) -> tuple[dict[str, Any], str]:
-    if reuse_scan:
-        scan = json.loads(Path(reuse_scan).read_text(encoding="utf-8"))
-        return scan, json.dumps(scan, indent=2)
-
-    raw_output = run_nmap_scan(target, "service", ports, timeout, True)
-    return json.loads(raw_output), raw_output
+        return {"scanner": "llm_database_collection", "hosts": []}, raw_output
 
 
 def run_vulnerability_stage(scan: dict[str, Any]) -> tuple[dict[str, Any], str]:
     scan_json = json.dumps(scan, indent=2)
-    agent = AgentRegistry.get_agent("vulnerability_scan_agent")
-    task = create_vulnerability_scan_task(agent, scan_json)
-    raw_output = run_agent_task("vulnerability_scan_agent", task)
+    agent = AgentRegistry.get_agent("enrichment_agent")
+    local_context = previous_output_context(("vulnerability_report.md", "service_summary.txt"), max_runs=2)
+    task = create_vulnerability_scan_task(
+        agent,
+        truncate_context(scan_json, 2500),
+        truncate_context(local_context, 1800),
+    )
+    raw_output = run_agent_task("enrichment_agent", task)
     try:
         return extract_json_object(raw_output), raw_output
     except Exception:
-        fallback = vulnerability_scan_from_nmap(scan)
-        return fallback, json.dumps(fallback, indent=2)
+        return {
+            "scanner": "llm_database_enrichment",
+            "finding_count": 0,
+            "findings": [],
+            "raw_enrichment": raw_output,
+        }, raw_output
 
 
-def run_vulnerability_tool_stage(scan: dict[str, Any]) -> tuple[dict[str, Any], str]:
-    result = vulnerability_scan_from_nmap(scan)
-    return result, json.dumps(result, indent=2)
+def run_tool_generation_stage(
+    artifact_run_id: int,
+    target: str,
+    scan_context: str,
+    vulnerability_context: str,
+    correlation_report: str,
+    prediction_report: str,
+    soc_report: str,
+    remediation_plan: str,
+) -> dict[str, Any]:
+    tool_agent = AgentRegistry.get_agent("tool_generation_agent")
+    tool_task = create_tool_generation_task(
+        tool_agent,
+        target,
+        truncate_context(scan_context, 3500),
+        truncate_context(vulnerability_context, 5000),
+        truncate_context(correlation_report, 3500),
+        truncate_context(prediction_report, 3500),
+        truncate_context(soc_report, 3500),
+        truncate_context(remediation_plan, 5000),
+    )
+    raw_manifest = run_agent_task("tool_generation_agent", tool_task)
+    try:
+        manifest = extract_json_object(raw_manifest)
+    except Exception:
+        salvaged_scripts = salvage_generated_script_objects(raw_manifest)
+        manifest = {
+            "agent": "tool_generation_agent",
+            "mode": "llm_generated_each_run",
+            "safety": "Tool generation output could not be parsed as JSON.",
+            "scripts": salvaged_scripts,
+            "raw_output": raw_manifest,
+        }
+    return write_generated_tool_scripts(artifact_run_id, target, manifest)
 
 
 def has_live_host(scan: dict[str, Any]) -> bool:
@@ -191,12 +269,13 @@ def build_run_artifacts(
     scan: dict[str, Any],
     service_summary: str,
     vulnerability_report: str,
+    correlation_report: str,
+    prediction_report: str,
     soc_report: str,
     remediation_plan: str,
     nmap_agent_output: str,
     script_artifacts: dict[str, Any] | None = None,
     remediation_execution: dict[str, Any] | None = None,
-    integrated_tool_results: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     run_dir = RUNS_DIR / f"run_{artifact_run_id:04d}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -209,6 +288,12 @@ def build_run_artifacts(
 
     vulnerability_path = run_dir / "vulnerability_report.md"
     vulnerability_path.write_text(vulnerability_report.rstrip() + "\n", encoding="utf-8")
+
+    correlation_path = run_dir / "correlation_report.md"
+    correlation_path.write_text(correlation_report.rstrip() + "\n", encoding="utf-8")
+
+    prediction_path = run_dir / "prediction_report.md"
+    prediction_path.write_text(prediction_report.rstrip() + "\n", encoding="utf-8")
 
     report_path = run_dir / "soc_report.md"
     report_path.write_text(soc_report.rstrip() + "\n", encoding="utf-8")
@@ -223,13 +308,6 @@ def build_run_artifacts(
         execution_summary_path.write_text(execution_summary.rstrip() + "\n", encoding="utf-8")
     else:
         execution_summary_path = None
-    tool_summary = build_integrated_tool_summary(integrated_tool_results)
-    if tool_summary:
-        tool_summary_path = run_dir / "integrated_tool_summary.md"
-        tool_summary_path.write_text(tool_summary.rstrip() + "\n", encoding="utf-8")
-    else:
-        tool_summary_path = None
-
     remediation_path = run_dir / "remediation_plan.md"
     remediation_path.write_text(remediation_plan.rstrip() + "\n", encoding="utf-8")
 
@@ -247,14 +325,16 @@ def build_run_artifacts(
                 service_summary,
                 "## Vulnerability Findings",
                 vulnerability_report,
+                "## Correlation",
+                correlation_report,
+                "## Prediction",
+                prediction_report,
                 "## SOC Report",
                 soc_report,
                 "## Remediation Plan",
                 remediation_plan,
                 "## Remediation Execution",
                 execution_summary or "Remediation scripts were not executed for this run.",
-                "## Integrated Tool Evidence",
-                tool_summary or "No additional tool stage was run.",
             ]
         ).rstrip()
         + "\n",
@@ -268,6 +348,8 @@ def build_run_artifacts(
         "nmap_scan_json": str(scan_path),
         "service_summary": str(summary_path),
         "vulnerability_report": str(vulnerability_path),
+        "correlation_report": str(correlation_path),
+        "prediction_report": str(prediction_path),
         "soc_report": str(report_path),
         "remediation_plan": str(remediation_path),
         "nmap_agent_output": str(raw_nmap_path),
@@ -282,11 +364,6 @@ def build_run_artifacts(
         artifacts["remediation_execution_results"] = str(remediation_execution["results_path"])
     if execution_summary_path:
         artifacts["remediation_execution_summary"] = str(execution_summary_path)
-    if integrated_tool_results:
-        artifacts["tool_evidence_json"] = str(integrated_tool_results.get("artifacts", {}).get("tool_evidence_json", ""))
-        artifacts["sigma_rules_dir"] = str(integrated_tool_results.get("artifacts", {}).get("sigma_rules_dir", ""))
-    if tool_summary_path:
-        artifacts["integrated_tool_summary"] = str(tool_summary_path)
     return artifacts
 
 
@@ -402,68 +479,6 @@ def build_remediation_execution_summary(remediation_execution: dict[str, Any] | 
     return "\n".join(lines)
 
 
-def build_integrated_tool_summary(integrated_tool_results: dict[str, Any] | None) -> str:
-    if not integrated_tool_results:
-        return ""
-    used = integrated_tool_results.get("used_tools", [])
-    skipped = integrated_tool_results.get("skipped_tools", [])
-    sigma = integrated_tool_results.get("results", {}).get("sigma_tool", {})
-    lines = [
-        "# Integrated Tool Summary",
-        "",
-        f"Used tools: `{', '.join(used) if used else 'none'}`",
-        f"Skipped tools: `{len(skipped)}`",
-        f"Generated Sigma rules: `{sigma.get('generated_rule_count', 0)}`",
-        f"Evidence file: `{integrated_tool_results.get('artifacts', {}).get('tool_evidence_json', '')}`",
-        "",
-        "| Tool | Status | Notes |",
-        "| :--- | :--- | :--- |",
-    ]
-    for tool_name in used:
-        if tool_name == "sigma_tool":
-            notes = f"generated {sigma.get('generated_rule_count', 0)} detection rules"
-        else:
-            result = integrated_tool_results.get("results", {}).get(tool_name, {})
-            notes = str(result.get("error") or "completed")
-        lines.append(f"| {tool_name} | used | {notes} |")
-    for skipped_item in skipped:
-        lines.append(
-            "| {tool} | skipped | {reason} |".format(
-                tool=skipped_item.get("tool", ""),
-                reason=str(skipped_item.get("reason", "")).replace("|", "\\|"),
-            )
-        )
-    return "\n".join(lines)
-
-
-def _script_header(name: str, target: str) -> str:
-    return (
-        "#!/usr/bin/env bash\n"
-        "set -euo pipefail\n\n"
-        f"# Generated by the remediation script generation agent for {target}.\n"
-        f"# Script: {name}\n"
-        "# Default mode is dry-run. Pass --apply to perform changes.\n\n"
-        "APPLY=0\n"
-        "if [[ \"${1:-}\" == \"--apply\" ]]; then\n"
-        "  APPLY=1\n"
-        "fi\n\n"
-        "run_cmd() {\n"
-        "  if [[ \"$APPLY\" -eq 1 ]]; then\n"
-        "    echo \"+ $*\"\n"
-        "    \"$@\"\n"
-        "  else\n"
-        "    printf '[dry-run] '\n"
-        "    printf '%q ' \"$@\"\n"
-        "    printf '\\n'\n"
-        "  fi\n"
-        "}\n\n"
-    )
-
-
-def _adaptive_script_header(name: str, target: str) -> str:
-    return _script_header(name, target) + "# Adapted after execution feedback from the target host.\n\n"
-
-
 def _write_script(path: Path, body: str) -> None:
     path.write_text(body, encoding="utf-8")
     path.chmod(0o750)
@@ -478,426 +493,10 @@ def _open_services(scan: dict[str, Any]) -> list[dict[str, Any]]:
     return services
 
 
-def _safe_json_loads(value: str) -> dict[str, Any]:
-    try:
-        parsed = json.loads(value)
-        return parsed if isinstance(parsed, dict) else {"value": parsed}
-    except Exception as exc:
-        return {"error": "invalid_tool_json", "message": str(exc), "raw": value}
-
-
-def _configured_env_value(name: str) -> str:
-    value = os.getenv(name, "").strip()
-    placeholders = {
-        "",
-        "replace_with_your_virustotal_api_key",
-        "replace_with_your_openrouter_api_key",
-        "replace_with_your_neo4j_password",
-        "replace_with_your_wazuh_password",
-    }
-    return "" if value.lower() in placeholders else value
-
-
-def _first_existing_file(paths: list[str]) -> str:
-    for path in paths:
-        candidate = Path(path)
-        if candidate.is_file():
-            return str(candidate)
-    return ""
-
-
-def _finding_detection_requirement(finding: dict[str, Any]) -> str:
-    service = finding.get("service") or "unknown service"
-    product = finding.get("product") or service
-    port = finding.get("port")
-    risk = str(finding.get("risk") or "low").upper()
-    return (
-        f"Detect suspicious activity against {product} {service} on port {port}. "
-        f"Risk level from scan evidence: {risk}."
-    )
-
-
-def _sigma_context_for_finding(finding: dict[str, Any]) -> tuple[str, str, str]:
-    service = str(finding.get("service") or "").lower()
-    if service in {"ftp", "telnet", "ssh", "netbios-ssn", "mysql", "postgresql", "irc"}:
-        return "linux", "network_connection", "high"
-    if service in {"http", "ajp13"}:
-        return "webserver", "webserver", "medium"
-    return "linux", "process_creation", str(finding.get("risk") or "medium")
-
-
-def run_integrated_tool_stage(
+def write_generated_tool_scripts(
     artifact_run_id: int,
     target: str,
-    scan: dict[str, Any],
-    vulnerability_scan: dict[str, Any],
-) -> dict[str, Any]:
-    run_dir = RUNS_DIR / f"run_{artifact_run_id:04d}"
-    tool_dir = run_dir / "tool_evidence"
-    if tool_dir.exists():
-        shutil.rmtree(tool_dir)
-    tool_dir.mkdir(parents=True, exist_ok=True)
-
-    evidence: dict[str, Any] = {
-        "used_tools": [],
-        "skipped_tools": [],
-        "artifacts": {},
-        "results": {},
-    }
-
-    sigma_tool = ToolRegistry.get_tool("sigma_tool")
-    sigma_dir = tool_dir / "sigma_rules"
-    sigma_dir.mkdir(parents=True, exist_ok=True)
-    sigma_results = []
-    high_findings = [
-        finding
-        for finding in vulnerability_scan.get("findings", [])
-        if str(finding.get("risk") or "").lower() in {"critical", "high"}
-    ][:8]
-    for index, finding in enumerate(high_findings, start=1):
-        product, category, level = _sigma_context_for_finding(finding)
-        result = _safe_json_loads(
-            sigma_tool._run(
-                action="generate",
-                attack_technique="T1046 Network Service Discovery",
-                detection_requirement=_finding_detection_requirement(finding),
-                logsource_product=product,
-                logsource_category=category,
-                level=level,
-            )
-        )
-        rule_text = result.get("sigma_rule", "")
-        rule_path = ""
-        if rule_text:
-            rule_path = str(sigma_dir / f"{index:02d}_{finding.get('service')}_{finding.get('port')}.yml")
-            Path(rule_path).write_text(rule_text, encoding="utf-8")
-        sigma_results.append(
-            {
-                "host": finding.get("host"),
-                "port": finding.get("port"),
-                "service": finding.get("service"),
-                "risk": finding.get("risk"),
-                "rule_path": rule_path,
-                "result": result,
-            }
-        )
-    evidence["used_tools"].append("sigma_tool")
-    evidence["results"]["sigma_tool"] = {
-        "generated_rule_count": len([item for item in sigma_results if item.get("rule_path")]),
-        "rules": sigma_results,
-    }
-    evidence["artifacts"]["sigma_rules_dir"] = str(sigma_dir)
-
-    suricata_path = _first_existing_file(
-        [
-            "data/eve.json",
-            "data/suricata/eve.json",
-            "outputs/eve.json",
-        ]
-    )
-    if suricata_path:
-        suricata_tool = ToolRegistry.get_tool("suricata_tool")
-        evidence["used_tools"].append("suricata_tool")
-        evidence["results"]["suricata_tool"] = _safe_json_loads(
-            suricata_tool._run(eve_path=suricata_path, event_type="alert", limit=200)
-        )
-    else:
-        evidence["skipped_tools"].append(
-            {"tool": "suricata_tool", "reason": "No Suricata eve.json file found."}
-        )
-
-    zeek_path = _first_existing_file(
-        [
-            "data/conn.log",
-            "data/zeek/conn.log",
-            "outputs/conn.log",
-        ]
-    )
-    if zeek_path:
-        zeek_tool = ToolRegistry.get_tool("zeek_tool")
-        evidence["used_tools"].append("zeek_tool")
-        evidence["results"]["zeek_tool"] = _safe_json_loads(
-            zeek_tool._run(log_path=zeek_path, log_type="auto", limit=200)
-        )
-    else:
-        evidence["skipped_tools"].append({"tool": "zeek_tool", "reason": "No Zeek log file found."})
-
-    if _configured_env_value("VIRUSTOTAL_API_KEY"):
-        vt_tool = ToolRegistry.get_tool("virustotal_tool")
-        evidence["used_tools"].append("virustotal_tool")
-        evidence["results"]["virustotal_tool"] = _safe_json_loads(
-            vt_tool._run(ip=target, include_relationships=False, relationship_limit=5)
-        )
-    else:
-        evidence["skipped_tools"].append(
-            {"tool": "virustotal_tool", "reason": "VIRUSTOTAL_API_KEY is not configured."}
-        )
-
-    if os.getenv("MISP_URL") and os.getenv("MISP_API_KEY"):
-        misp_tool = ToolRegistry.get_tool("misp_tool")
-        evidence["used_tools"].append("misp_tool")
-        evidence["results"]["misp_tool"] = _safe_json_loads(misp_tool._run(action="ioc_lookup", ip=target, limit=10))
-    else:
-        evidence["skipped_tools"].append(
-            {"tool": "misp_tool", "reason": "MISP_URL and MISP_API_KEY are not configured."}
-        )
-
-    evidence_path = tool_dir / "tool_evidence.json"
-    evidence_path.write_text(json.dumps(evidence, indent=2), encoding="utf-8")
-    evidence["artifacts"]["tool_evidence_json"] = str(evidence_path)
-    evidence_path.write_text(json.dumps(evidence, indent=2), encoding="utf-8")
-    return evidence
-
-
-def _needed_tool_specs(scan: dict[str, Any], vulnerability_scan: dict[str, Any]) -> list[dict[str, Any]]:
-    services = _open_services(scan)
-    service_names = {str(item.get("service") or "").lower() for item in services}
-    ports = {int(item.get("port")) for item in services if item.get("port")}
-
-    specs = [
-        {
-            "name": "validate_exposure",
-            "filename": "01_validate_exposure.sh",
-            "purpose": "Re-run service validation against the target and capture before/after evidence.",
-            "interpreter": "bash",
-        }
-    ]
-
-    if {"telnet", "ftp", "exec", "login"} & service_names or ports & {21, 23, 512, 513, 514, 2121}:
-        specs.append(
-            {
-                "name": "disable_legacy_remote_services",
-                "filename": "02_disable_legacy_remote_services.sh",
-                "purpose": "Stop and disable legacy cleartext or remote shell services.",
-                "interpreter": "bash",
-            }
-        )
-
-    if {"netbios-ssn", "microsoft-ds"} & service_names or ports & {139, 445}:
-        specs.append(
-            {
-                "name": "harden_samba",
-                "filename": "03_harden_samba.sh",
-                "purpose": "Back up Samba configuration and apply SMB hardening settings.",
-                "interpreter": "bash",
-            }
-        )
-
-    if {"mysql", "postgresql"} & service_names or ports & {3306, 5432}:
-        specs.append(
-            {
-                "name": "restrict_databases",
-                "filename": "04_restrict_databases.sh",
-                "purpose": "Restrict database listeners and restart database services.",
-                "interpreter": "bash",
-            }
-        )
-
-    if {"http", "ajp13"} & service_names or ports & {80, 8009, 8180}:
-        specs.append(
-            {
-                "name": "web_service_review",
-                "filename": "05_web_service_review.sh",
-                "purpose": "Collect web-service package and listener evidence for patch planning.",
-                "interpreter": "bash",
-            }
-        )
-
-    high_risk = any(
-        str(item.get("risk") or "").lower() in {"critical", "high"}
-        for item in vulnerability_scan.get("findings", [])
-    )
-    if high_risk:
-        specs.append(
-            {
-                "name": "host_firewall_baseline",
-                "filename": "06_host_firewall_baseline.sh",
-                "purpose": "Apply a restrictive host firewall baseline for the identified exposed services.",
-                "interpreter": "bash",
-            }
-        )
-
-    return specs
-
-
-def _script_body(spec_name: str, target: str, ports: str) -> str:
-    if spec_name == "validate_exposure":
-        return (
-            _script_header("validate_exposure", target)
-            + f"TARGET=${{TARGET:-{target}}}\n"
-            + f"PORTS=${{PORTS:-{ports}}}\n"
-            + "OUT_DIR=${OUT_DIR:-./validation-output}\n\n"
-            + "mkdir -p \"$OUT_DIR\"\n"
-            + "echo \"Writing validation evidence to $OUT_DIR\"\n"
-            + "nmap -sV --version-light -Pn -p \"$PORTS\" -oA \"$OUT_DIR/nmap_validation\" \"$TARGET\"\n"
-        )
-
-    if spec_name == "disable_legacy_remote_services":
-        return (
-            _script_header("disable_legacy_remote_services", target)
-            + "for svc in telnet telnetd inetd openbsd-inetd xinetd vsftpd proftpd rsh rsh-server rlogin rexec; do\n"
-            + "  if systemctl list-unit-files \"$svc.service\" >/dev/null 2>&1; then\n"
-            + "    run_cmd systemctl stop \"$svc.service\"\n"
-            + "    run_cmd systemctl disable \"$svc.service\"\n"
-            + "  fi\n"
-            + "done\n"
-            + "echo \"Review /etc/inetd.conf and /etc/xinetd.d/ for legacy shell services.\"\n"
-        )
-
-    if spec_name == "harden_samba":
-        return (
-            _script_header("harden_samba", target)
-            + "SMB_CONF=${SMB_CONF:-/etc/samba/smb.conf}\n"
-            + "if [[ -f \"$SMB_CONF\" ]]; then\n"
-            + "  run_cmd cp \"$SMB_CONF\" \"$SMB_CONF.generated-backup\"\n"
-            + "  if [[ \"$APPLY\" -eq 1 ]]; then\n"
-            + "    grep -q '^\\s*server min protocol' \"$SMB_CONF\" || printf '\\nserver min protocol = SMB2\\nmin protocol = SMB2\\n' >> \"$SMB_CONF\"\n"
-            + "    systemctl restart smbd || true\n"
-            + "  else\n"
-            + "    echo '[dry-run] would ensure SMB2 minimum protocol and restart smbd'\n"
-            + "  fi\n"
-            + "else\n"
-            + "  echo \"Samba config not found at $SMB_CONF\"\n"
-            + "fi\n"
-        )
-
-    if spec_name == "restrict_databases":
-        return (
-            _script_header("restrict_databases", target)
-            + "echo \"Review database bind addresses before applying.\"\n"
-            + "for svc in mysql mariadb postgresql; do\n"
-            + "  if systemctl list-unit-files \"$svc.service\" >/dev/null 2>&1; then\n"
-            + "    run_cmd systemctl restart \"$svc.service\"\n"
-            + "  fi\n"
-            + "done\n"
-            + "echo \"Set MySQL/PostgreSQL bind-address/listen_addresses to localhost or approved app subnets.\"\n"
-        )
-
-    if spec_name == "web_service_review":
-        return (
-            _script_header("web_service_review", target)
-            + "echo 'Collecting web stack evidence for patch planning.'\n"
-            + "apache2 -v 2>/dev/null || httpd -v 2>/dev/null || true\n"
-            + "dpkg -l 2>/dev/null | grep -Ei 'apache|tomcat|php|openssl' || true\n"
-            + "ss -ltnp | grep -E ':80|:443|:8009|:8180' || true\n"
-        )
-
-    if spec_name == "host_firewall_baseline":
-        return (
-            _script_header("host_firewall_baseline", target)
-            + "MGMT_CIDR=${MGMT_CIDR:-127.0.0.1/32}\n"
-            + "echo \"Using management CIDR: $MGMT_CIDR\"\n"
-            + "run_cmd ufw default deny incoming\n"
-            + "run_cmd ufw allow from \"$MGMT_CIDR\" to any port 22 proto tcp\n"
-            + "run_cmd ufw deny 21/tcp\n"
-            + "run_cmd ufw deny 23/tcp\n"
-            + "run_cmd ufw deny 139/tcp\n"
-            + "run_cmd ufw deny 445/tcp\n"
-            + "run_cmd ufw deny 3306/tcp\n"
-            + "run_cmd ufw deny 5432/tcp\n"
-            + "run_cmd ufw deny 6667/tcp\n"
-            + "run_cmd ufw deny 6697/tcp\n"
-            + "run_cmd ufw enable\n"
-        )
-
-    raise ValueError(f"Unknown script spec: {spec_name}")
-
-
-def _adaptive_firewall_script_body(target: str) -> str:
-    return (
-        _adaptive_script_header("host_firewall_baseline_adapted", target)
-        + "MGMT_CIDR=${MGMT_CIDR:-127.0.0.1/32}\n"
-        + "echo \"Using management CIDR: $MGMT_CIDR\"\n"
-        + "SUDO=()\n"
-        + "if [[ \"${EUID:-$(id -u)}\" -eq 0 ]]; then\n"
-        + "  SUDO=()\n"
-        + "elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then\n"
-        + "  SUDO=(sudo -n)\n"
-        + "else\n"
-        + "  SUDO=()\n"
-        + "fi\n"
-        + "run_privileged() {\n"
-        + "  if [[ \"${#SUDO[@]}\" -gt 0 ]]; then\n"
-        + "    run_cmd \"${SUDO[@]}\" \"$@\"\n"
-        + "  else\n"
-        + "    run_cmd \"$@\"\n"
-        + "  fi\n"
-        + "}\n"
-        + "can_install_or_apply() {\n"
-        + "  [[ \"${EUID:-$(id -u)}\" -eq 0 || \"${#SUDO[@]}\" -gt 0 ]]\n"
-        + "}\n"
-        + "install_ufw_if_possible() {\n"
-        + "  if command -v ufw >/dev/null 2>&1; then\n"
-        + "    return 0\n"
-        + "  fi\n"
-        + "  if [[ \"$APPLY\" -ne 1 ]]; then\n"
-        + "    echo '[dry-run] would install ufw if package manager and privileges are available'\n"
-        + "    return 1\n"
-        + "  fi\n"
-        + "  if ! can_install_or_apply; then\n"
-        + "    echo 'Cannot install ufw automatically: root or passwordless sudo is required.' >&2\n"
-        + "    return 1\n"
-        + "  fi\n"
-        + "  if command -v apt-get >/dev/null 2>&1; then\n"
-        + "    run_privileged apt-get update\n"
-        + "    run_privileged apt-get install -y ufw\n"
-        + "  elif command -v dnf >/dev/null 2>&1; then\n"
-        + "    run_privileged dnf install -y ufw\n"
-        + "  elif command -v yum >/dev/null 2>&1; then\n"
-        + "    run_privileged yum install -y ufw\n"
-        + "  elif command -v pacman >/dev/null 2>&1; then\n"
-        + "    run_privileged pacman -Sy --noconfirm ufw\n"
-        + "  elif command -v zypper >/dev/null 2>&1; then\n"
-        + "    run_privileged zypper --non-interactive install ufw\n"
-        + "  else\n"
-        + "    echo 'Cannot install ufw automatically: no supported package manager found.' >&2\n"
-        + "    return 1\n"
-        + "  fi\n"
-        + "}\n"
-        + "install_ufw_if_possible || true\n"
-        + "if command -v ufw >/dev/null 2>&1; then\n"
-        + "  FIREWALL_BACKEND=ufw\n"
-        + "elif command -v nft >/dev/null 2>&1; then\n"
-        + "  FIREWALL_BACKEND=nftables\n"
-        + "elif command -v iptables >/dev/null 2>&1; then\n"
-        + "  FIREWALL_BACKEND=iptables\n"
-        + "else\n"
-        + "  FIREWALL_BACKEND=none\n"
-        + "fi\n"
-        + "echo \"Selected firewall backend: $FIREWALL_BACKEND\"\n\n"
-        + "if [[ \"$APPLY\" -eq 1 && \"$FIREWALL_BACKEND\" != \"none\" ]] && ! can_install_or_apply; then\n"
-        + "  echo 'SKIPPED: firewall changes require root privileges or passwordless sudo.' >&2\n"
-        + "  exit 20\n"
-        + "fi\n"
-        + "if [[ \"$FIREWALL_BACKEND\" == \"ufw\" ]]; then\n"
-        + "  run_privileged ufw default deny incoming\n"
-        + "  run_privileged ufw allow from \"$MGMT_CIDR\" to any port 22 proto tcp\n"
-        + "  for port in 21 23 139 445 3306 5432 6667 6697; do run_privileged ufw deny \"$port/tcp\"; done\n"
-        + "  run_privileged ufw enable\n"
-        + "elif [[ \"$FIREWALL_BACKEND\" == \"nftables\" ]]; then\n"
-        + "  if [[ \"$APPLY\" -eq 1 ]]; then\n"
-        + "    run_privileged nft list ruleset >/dev/null\n"
-        + "  else\n"
-        + "    echo '[dry-run] would validate nftables and create deny rules for exposed legacy ports'\n"
-        + "  fi\n"
-        + "  echo 'nftables backend detected. Review policy before applying persistent production rules.'\n"
-        + "elif [[ \"$FIREWALL_BACKEND\" == \"iptables\" ]]; then\n"
-        + "  for port in 21 23 139 445 3306 5432 6667 6697; do\n"
-        + "    run_privileged iptables -A INPUT -p tcp --dport \"$port\" -j DROP\n"
-        + "  done\n"
-        + "else\n"
-        + "  echo 'No supported firewall tool found and automatic install was not possible.' >&2\n"
-        + "  exit 20\n"
-        + "fi\n"
-    )
-
-
-def generate_remediation_scripts(
-    artifact_run_id: int,
-    target: str,
-    ports: str,
-    scan: dict[str, Any],
-    vulnerability_scan: dict[str, Any],
+    manifest: dict[str, Any],
 ) -> dict[str, Any]:
     scripts_dir = RUNS_DIR / f"run_{artifact_run_id:04d}" / "generated_scripts"
     if scripts_dir.exists():
@@ -908,26 +507,33 @@ def generate_remediation_scripts(
         shutil.rmtree(CURRENT_GENERATED_TOOLS_DIR)
     CURRENT_GENERATED_TOOLS_DIR.mkdir(parents=True, exist_ok=True)
 
-    specs = _needed_tool_specs(scan, vulnerability_scan)
-    manifest = {
-        "agent": "remediation_script_generation_agent",
-        "target": target,
-        "mode": "generated_each_run",
-        "safety": "Scripts default to dry-run and require --apply for changes.",
-        "scripts": [],
-    }
-    for spec in specs:
-        script_path = scripts_dir / spec["filename"]
-        current_script_path = CURRENT_GENERATED_TOOLS_DIR / spec["filename"]
-        _write_script(script_path, _script_body(spec["name"], target, ports))
+    manifest = dict(manifest)
+    manifest.setdefault("agent", "tool_generation_agent")
+    manifest.setdefault("target", target)
+    manifest.setdefault("mode", "llm_generated_each_run")
+    manifest.setdefault("safety", "Scripts default to dry-run and require --apply for changes.")
+
+    written_scripts = []
+    for index, script in enumerate(manifest.get("scripts", []), start=1):
+        filename = str(script.get("filename") or f"{index:02d}_{script.get('name', 'generated_tool')}.sh")
+        filename = Path(filename).name
+        body = str(script.get("body") or "").strip()
+        if not body:
+            continue
+
+        script_path = scripts_dir / filename
+        current_script_path = CURRENT_GENERATED_TOOLS_DIR / filename
+        _write_script(script_path, body + "\n")
         shutil.copy2(script_path, current_script_path)
-        manifest["scripts"].append(
+        written_scripts.append(
             {
-                **spec,
+                **{key: value for key, value in script.items() if key != "body"},
+                "filename": filename,
                 "path": str(script_path),
                 "current_path": str(current_script_path),
             }
         )
+    manifest["scripts"] = written_scripts
 
     manifest_path = scripts_dir / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -994,45 +600,6 @@ def _run_generated_script(
     }
 
 
-def _adapt_failed_script(
-    script: dict[str, Any],
-    failed_attempt: dict[str, Any],
-    script_artifacts: dict[str, Any],
-) -> dict[str, Any] | None:
-    stderr = str(failed_attempt.get("stderr") or "")
-    if script.get("name") == "host_firewall_baseline" and "ufw: command not found" in stderr:
-        adapted_name = "06_host_firewall_baseline_adapted.sh"
-        scripts_dir = Path(script_artifacts["scripts_dir"])
-        current_dir = Path(script_artifacts["current_scripts_dir"])
-        adapted_path = scripts_dir / adapted_name
-        current_adapted_path = current_dir / adapted_name
-        target = str(script_artifacts["manifest"].get("target", "target"))
-
-        _write_script(adapted_path, _adaptive_firewall_script_body(target))
-        shutil.copy2(adapted_path, current_adapted_path)
-        adapted_script = {
-            **script,
-            "script": adapted_name,
-            "filename": adapted_name,
-            "name": "host_firewall_baseline_adapted",
-            "path": str(adapted_path),
-            "current_path": str(current_adapted_path),
-            "adapted_from": script.get("filename"),
-            "adaptation_reason": "ufw was not installed; generated backend-detecting firewall script.",
-        }
-        script_artifacts["manifest"].setdefault("adaptations", []).append(adapted_script)
-        Path(script_artifacts["manifest_path"]).write_text(
-            json.dumps(script_artifacts["manifest"], indent=2),
-            encoding="utf-8",
-        )
-        Path(script_artifacts["current_manifest_path"]).write_text(
-            json.dumps(script_artifacts["manifest"], indent=2),
-            encoding="utf-8",
-        )
-        return adapted_script
-    return None
-
-
 def execute_generated_remediation_scripts(
     script_artifacts: dict[str, Any],
     apply_changes: bool = False,
@@ -1081,194 +648,12 @@ def execute_generated_remediation_scripts(
             ],
         }
 
-        if attempt["status"] != "ok":
-            adapted_script = _adapt_failed_script(script, attempt, script_artifacts)
-            if adapted_script:
-                retry = _run_generated_script(
-                    Path(adapted_script["path"]),
-                    execution_dir,
-                    results["mode"],
-                    apply_changes,
-                    timeout,
-                    "adapted",
-                )
-                result.update(
-                    {
-                        "script": adapted_script["filename"],
-                        "path": adapted_script["path"],
-                        "status": retry["status"],
-                        "returncode": retry["returncode"],
-                        "stdout_path": retry["stdout_path"],
-                        "stderr_path": retry["stderr_path"],
-                        "adapted": True,
-                        "adapted_from": adapted_script["adapted_from"],
-                        "adaptation_reason": adapted_script["adaptation_reason"],
-                    }
-                )
-                result["attempts"].append(
-                    {
-                        "script": adapted_script["filename"],
-                        "status": retry["status"],
-                        "returncode": retry["returncode"],
-                        "stdout_path": retry["stdout_path"],
-                        "stderr_path": retry["stderr_path"],
-                        "adaptation_reason": adapted_script["adaptation_reason"],
-                    }
-                )
-
         results["results"].append(result)
 
     results_path = execution_dir / "execution_results.json"
     results["results_path"] = str(results_path)
     results_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
     return results
-
-
-def _risk_counts(vulnerability_scan: dict[str, Any]) -> dict[str, int]:
-    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-    for finding in vulnerability_scan.get("findings", []):
-        risk = str(finding.get("risk") or "low").lower()
-        counts[risk] = counts.get(risk, 0) + 1
-    return counts
-
-
-def build_tool_soc_report(
-    target: str,
-    scan: dict[str, Any],
-    service_summary: str,
-    vulnerability_scan: dict[str, Any],
-) -> str:
-    counts = _risk_counts(vulnerability_scan)
-    top_findings = sorted(
-        vulnerability_scan.get("findings", []),
-        key=lambda item: {"critical": 0, "high": 1, "medium": 2, "low": 3}.get(
-            str(item.get("risk") or "low").lower(),
-            4,
-        ),
-    )[:12]
-    finding_lines = []
-    for finding in top_findings:
-        refs = finding.get("exploit_references") or []
-        ref_text = ", ".join(
-            str(ref.get("cve") or ref.get("exploit_id") or "reference") for ref in refs[:3]
-        )
-        finding_lines.append(
-            "- {risk}: {host}:{port}/{protocol} {service} {product} {version}{refs}".format(
-                risk=str(finding.get("risk") or "low").upper(),
-                host=finding.get("host"),
-                port=finding.get("port"),
-                protocol=finding.get("protocol"),
-                service=finding.get("service") or "unknown",
-                product=finding.get("product") or "",
-                version=finding.get("version") or "",
-                refs=f" | refs: {ref_text}" if ref_text else "",
-            ).strip()
-        )
-
-    return (
-        "# SOC Threat Intelligence Report\n\n"
-        f"Target: `{target}`\n\n"
-        "## Executive Summary\n\n"
-        f"Nmap identified {len(vulnerability_scan.get('findings', []))} open service findings. "
-        f"Risk distribution: {counts.get('critical', 0)} critical, {counts.get('high', 0)} high, "
-        f"{counts.get('medium', 0)} medium, {counts.get('low', 0)} low.\n\n"
-        "## Attack Surface\n\n"
-        f"{service_summary}\n\n"
-        "## Prioritized Findings\n\n"
-        + ("\n".join(finding_lines) if finding_lines else "No open-service findings were generated.")
-        + "\n\n## Detection Notes\n\n"
-        "- Monitor inbound access to Telnet, FTP, SMB, database, IRC, and remote shell services.\n"
-        "- Alert on repeated authentication failures and cleartext management protocols.\n"
-        "- Treat exposed legacy services on Metasploitable as intentionally vulnerable lab evidence.\n\n"
-        "## Analytic Gaps\n\n"
-        "- This report is generated from service discovery and local vulnerability references.\n"
-        "- Confirm exact package patch levels before applying production remediation decisions.\n"
-    )
-
-
-def build_tool_remediation_plan(target: str, vulnerability_scan: dict[str, Any]) -> str:
-    risky_services = {
-        str(finding.get("service") or "").lower()
-        for finding in vulnerability_scan.get("findings", [])
-        if str(finding.get("risk") or "").lower() in {"critical", "high"}
-    }
-    service_actions = []
-    if {"telnet", "ftp", "netbios-ssn", "mysql", "postgresql"} & risky_services:
-        service_actions.extend(
-            [
-                "- Disable Telnet and replace it with hardened SSH.",
-                "- Disable anonymous or legacy FTP; use SFTP/SSH for file transfer.",
-                "- Restrict SMB/Samba to trusted internal hosts and disable SMBv1.",
-                "- Bind MySQL/PostgreSQL to localhost or application subnets only.",
-            ]
-        )
-    service_actions.extend(
-        [
-            "- Patch or remove end-of-life services identified in the Nmap scan.",
-            "- Apply host firewall rules allowing only required management and application ports.",
-            "- Re-run Nmap after remediation and compare open ports against the expected baseline.",
-        ]
-    )
-    return (
-        "# Remediation Plan\n\n"
-        f"Target: `{target}`\n\n"
-        "## Priority Actions\n\n"
-        + "\n".join(service_actions)
-        + "\n\n## Validation\n\n"
-        "- Confirm closed services with `nmap -sV` from the same network segment.\n"
-        "- Review authentication logs for prior access attempts.\n"
-        "- Keep the Metasploitable host isolated from production networks.\n"
-    )
-
-
-def append_integrated_tool_remediation_actions(
-    remediation_plan: str,
-    integrated_tool_results: dict[str, Any] | None,
-) -> str:
-    if not integrated_tool_results:
-        return remediation_plan
-
-    sigma = integrated_tool_results.get("results", {}).get("sigma_tool", {})
-    skipped = integrated_tool_results.get("skipped_tools", [])
-    used = integrated_tool_results.get("used_tools", [])
-    actions = []
-
-    sigma_count = int(sigma.get("generated_rule_count") or 0)
-    sigma_dir = integrated_tool_results.get("artifacts", {}).get("sigma_rules_dir", "")
-    if sigma_count:
-        actions.append(
-            f"- Review and deploy the {sigma_count} generated Sigma detection rules from `{sigma_dir}` "
-            "to the SIEM after tuning field mappings and log sources."
-        )
-
-    if "suricata_tool" in used:
-        actions.append("- Review parsed Suricata alerts and add network blocks or signatures for confirmed malicious traffic.")
-    if "zeek_tool" in used:
-        actions.append("- Review Zeek connection/DNS/HTTP telemetry and add network containment for suspicious sessions.")
-    if "virustotal_tool" in used:
-        vt = integrated_tool_results.get("results", {}).get("virustotal_tool", {})
-        detections = vt.get("detections", {}) if isinstance(vt, dict) else {}
-        malicious = detections.get("malicious") if isinstance(detections, dict) else None
-        if malicious:
-            actions.append("- VirusTotal reported malicious detections for the target IOC; prioritize isolation and IOC blocking.")
-        else:
-            actions.append("- VirusTotal enrichment completed; keep reputation evidence attached to the case for analyst review.")
-    if "misp_tool" in used:
-        actions.append("- MISP enrichment completed; sync matching attributes/tags into the case and detection backlog.")
-
-    if skipped:
-        skipped_text = ", ".join(f"{item.get('tool')} ({item.get('reason')})" for item in skipped)
-        actions.append(f"- Complete missing telemetry/enrichment setup so skipped tools can run next time: {skipped_text}.")
-
-    if not actions:
-        return remediation_plan
-
-    return (
-        remediation_plan.rstrip()
-        + "\n\n## Integrated Tool Actions\n\n"
-        + "\n".join(actions)
-        + "\n"
-    )
 
 
 def update_saved_remediation_plan(db_path: Path, run_id: int, remediation_plan: str) -> None:
@@ -1354,15 +739,17 @@ def run_threat_intel_pipeline(
     timeout: int = 180,
     db_path: str | Path = DEFAULT_DB_PATH,
     reuse_scan: str = "",
-    use_agents: bool = True,
+    include_remediation_plan: bool = True,
     auto_execute_remediation: bool = True,
     auto_apply_remediation: bool = False,
     remediation_timeout: int = 120,
 ) -> dict[str, Any]:
-    if use_agents:
-        scan, nmap_agent_output = run_nmap_stage(target, ports, timeout, reuse_scan)
-    else:
-        scan, nmap_agent_output = run_nmap_tool_stage(target, ports, timeout, reuse_scan)
+    if not reuse_scan:
+        raise ValueError(
+            "Threat-intel runs require collected evidence via --reuse-scan. "
+            "The hard-coded local scanner/tool-only path has been removed; provide evidence for the LLM/database agents."
+        )
+    scan, nmap_agent_output = run_nmap_stage(target, ports, timeout, reuse_scan)
     service_summary = summarize_services(scan)
 
     if not has_live_host(scan):
@@ -1389,6 +776,8 @@ def run_threat_intel_pipeline(
             diagnostic,
             diagnostic,
             diagnostic,
+            diagnostic,
+            diagnostic,
             nmap_agent_output,
         )
         return {
@@ -1400,6 +789,8 @@ def run_threat_intel_pipeline(
             "scan": scan,
             "service_summary": service_summary,
             "vulnerability_report": diagnostic,
+            "correlation_report": diagnostic,
+            "prediction_report": diagnostic,
             "soc_report": diagnostic,
             "remediation_plan": diagnostic,
             "db_path": str(db_path),
@@ -1407,10 +798,7 @@ def run_threat_intel_pipeline(
             "nmap_agent_output": nmap_agent_output,
         }
 
-    if use_agents:
-        vulnerability_json, vulnerability_report = run_vulnerability_stage(scan)
-    else:
-        vulnerability_json, vulnerability_report = run_vulnerability_tool_stage(scan)
+    vulnerability_json, vulnerability_report = run_vulnerability_stage(scan)
     scan_context = json.dumps(scan, indent=2)
     vulnerability_context = (
         vulnerability_report
@@ -1418,22 +806,80 @@ def run_threat_intel_pipeline(
         else json.dumps(vulnerability_json, indent=2)
     )
 
-    if use_agents:
-        reporting_agent = AgentRegistry.get_agent("reporting_agent")
-        report_task = create_reporting_task(reporting_agent, target, scan_context, vulnerability_context)
-        soc_report = run_agent_task("reporting_agent", report_task)
+    artifact_run_id = next_artifact_run_id()
+    telemetry_context = (
+        "No hard-coded telemetry tools were auto-run. Use the ingested knowledge database "
+        "through your configured tools to correlate this evidence."
+    )
+    local_context = previous_output_context(
+        (
+            "correlation_report.md",
+            "prediction_report.md",
+            "soc_report.md",
+            "remediation_plan.md",
+        ),
+        max_runs=2,
+        chars_per_file=650,
+    )
+    correlation_agent = AgentRegistry.get_agent("correlation_agent")
+    correlation_task = create_correlation_task(
+        correlation_agent,
+        target,
+        truncate_context(scan_context, 2200),
+        truncate_context(vulnerability_context, 2200),
+        telemetry_context,
+        truncate_context(local_context, 1800),
+    )
+    correlation_report = run_agent_task("correlation_agent", correlation_task)
 
-        remediation_agent = AgentRegistry.get_agent("remediation_agent")
+    prediction_agent = AgentRegistry.get_agent("prediction_agent")
+    prediction_task = create_prediction_task(
+        prediction_agent,
+        target,
+        truncate_context(correlation_report, 1800),
+        truncate_context(vulnerability_context, 1800),
+        truncate_context(local_context, 1500),
+    )
+    prediction_report = run_agent_task("prediction_agent", prediction_task)
+
+    reporting_agent = AgentRegistry.get_agent("reporting_agent")
+    report_task = create_reporting_task(
+        reporting_agent,
+        target,
+        truncate_context(scan_context, 1800),
+        truncate_context(vulnerability_context, 1800),
+        truncate_context(correlation_report, 1500),
+        truncate_context(prediction_report, 1200),
+        truncate_context(local_context, 1600),
+    )
+    soc_report = run_agent_task("reporting_agent", report_task)
+
+    script_artifacts = None
+    if include_remediation_plan:
+        remediation_agent = AgentRegistry.get_agent("response_agent")
         remediation_task = create_remediation_task(
             remediation_agent,
             target,
-            soc_report,
-            vulnerability_context,
+            truncate_context(soc_report, 1800),
+            truncate_context(vulnerability_context, 1800),
+            truncate_context(correlation_report, 1300),
+            truncate_context(prediction_report, 1000),
+            truncate_context(local_context, 1600),
         )
-        remediation_plan = run_agent_task("remediation_agent", remediation_task)
+        remediation_plan = run_agent_task("response_agent", remediation_task)
+
+        script_artifacts = run_tool_generation_stage(
+            artifact_run_id,
+            target,
+            scan_context,
+            vulnerability_context,
+            correlation_report,
+            prediction_report,
+            soc_report,
+            remediation_plan,
+        )
     else:
-        soc_report = build_tool_soc_report(target, scan, service_summary, vulnerability_json)
-        remediation_plan = build_tool_remediation_plan(target, vulnerability_json)
+        remediation_plan = "Remediation plan intentionally excluded for this run."
 
     run_id = save_run(
         Path(db_path),
@@ -1445,27 +891,8 @@ def run_threat_intel_pipeline(
         soc_report,
         remediation_plan,
     )
-    artifact_run_id = next_artifact_run_id(run_id)
-    integrated_tool_results = run_integrated_tool_stage(
-        artifact_run_id,
-        target,
-        scan,
-        vulnerability_json,
-    )
-    remediation_plan = append_integrated_tool_remediation_actions(
-        remediation_plan,
-        integrated_tool_results,
-    )
-    update_saved_remediation_plan(Path(db_path), run_id, remediation_plan)
-    script_artifacts = generate_remediation_scripts(
-        artifact_run_id,
-        target,
-        ports,
-        scan,
-        vulnerability_json,
-    )
     remediation_execution = None
-    if auto_execute_remediation:
+    if auto_execute_remediation and script_artifacts:
         remediation_execution = execute_generated_remediation_scripts(
             script_artifacts,
             apply_changes=auto_apply_remediation,
@@ -1476,33 +903,36 @@ def run_threat_intel_pipeline(
         artifact_run_id,
         target,
         ports,
-        "complete",
+        "complete" if include_remediation_plan else "complete_without_remediation",
         scan,
         service_summary,
         vulnerability_context,
+        correlation_report,
+        prediction_report,
         soc_report,
         remediation_plan,
         nmap_agent_output,
         script_artifacts,
         remediation_execution,
-        integrated_tool_results,
     )
     return {
         "run_id": run_id,
         "artifact_run_id": artifact_run_id,
-        "status": "complete",
+        "status": "complete" if include_remediation_plan else "complete_without_remediation",
         "target": target,
         "ports": ports,
         "scan": scan,
         "service_summary": service_summary,
         "vulnerability_scan": vulnerability_json,
         "vulnerability_report": vulnerability_context,
+        "correlation_report": correlation_report,
+        "prediction_report": prediction_report,
         "soc_report": soc_report,
         "remediation_plan": remediation_plan,
+        "remediation_plan_excluded": not include_remediation_plan,
         "db_path": str(db_path),
         "artifacts": artifacts,
-        "generated_scripts": script_artifacts["manifest"],
-        "integrated_tools": integrated_tool_results,
+        "generated_scripts": script_artifacts["manifest"] if script_artifacts else None,
         "remediation_execution_status": remediation_execution_status(remediation_execution),
         "remediation_summary": remediation_execution_overview(remediation_execution),
         "remediation_execution": remediation_execution,
@@ -1518,8 +948,8 @@ def main() -> None:
         timeout=args.timeout,
         db_path=args.db_path,
         reuse_scan=args.reuse_scan,
-        use_agents=not args.tool_only,
         auto_execute_remediation=not args.no_auto_remediation,
+        include_remediation_plan=not args.skip_remediation_plan,
         auto_apply_remediation=args.auto_apply_remediation,
         remediation_timeout=args.remediation_timeout,
     )

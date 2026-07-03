@@ -1,44 +1,86 @@
 from agents.base_agent import BaseAgentFactory
 from agents.registry import AgentRegistry
-from tools.registry import ToolRegistry
+from agents.tool_config import configured_agent_tools
 
-import tools.exploitdb_tool  # noqa: F401 - registers exploitdb_tool
-import tools.knowledge_base_tool  # noqa: F401 - registers knowledge_base_tool
-import tools.nmap_tool  # noqa: F401 - registers nmap_tool
-import tools.vulnerability_scan_tool  # noqa: F401 - registers vulnerability_scan_tool
+
+@AgentRegistry.register("collection_agent")
+def create_collection_agent():
+    return BaseAgentFactory.create(
+        role="Threat Intel Collection Agent",
+        goal=(
+            "Collect authorized security telemetry, service-discovery output, and local log evidence "
+            "for the threat-intelligence workflow."
+        ),
+        backstory=(
+            "You are the collection layer for a SOC threat-intel crew. You only gather evidence from "
+            "explicitly authorized lab targets and preserve it in machine-readable form."
+        ),
+        tools=configured_agent_tools("collection_agent"),
+        llm_max_tokens=500,
+        allow_delegation=False,
+    )
 
 
 @AgentRegistry.register("nmap_scan_agent")
 def create_nmap_scan_agent():
+    return create_collection_agent()
+
+
+@AgentRegistry.register("enrichment_agent")
+def create_enrichment_agent():
     return BaseAgentFactory.create(
-        role="Nmap Scan Agent",
-        goal="Run authorized Nmap service discovery against the lab target and return structured scan evidence.",
-        backstory=(
-            "You are a controlled-lab reconnaissance agent. You only scan explicitly authorized "
-            "targets, preserve raw evidence, and return machine-readable Nmap results."
+        role="Threat Intel Enrichment Agent",
+        goal=(
+            "Enrich collected service and telemetry evidence with vulnerability, exploit reference, "
+            "IOC, detection, and knowledge-base context."
         ),
-        tools=[ToolRegistry.get_tool("nmap_tool")],
+        backstory=(
+            "You are a defensive enrichment analyst for a SOC lab. You map exposed products, "
+            "versions, and log indicators to likely weaknesses and references without giving exploit steps."
+        ),
+        tools=configured_agent_tools("enrichment_agent"),
+        llm_max_tokens=700,
         allow_delegation=False,
     )
 
 
 @AgentRegistry.register("vulnerability_scan_agent")
 def create_vulnerability_scan_agent():
+    return create_enrichment_agent()
+
+
+@AgentRegistry.register("correlation_agent")
+def create_correlation_agent():
     return BaseAgentFactory.create(
-        role="Vulnerability Scan Agent",
+        role="Threat Intel Correlation Agent",
         goal=(
-            "Turn Nmap service evidence into defensive vulnerability findings using local "
-            "ExploitDB and knowledge-base data."
+            "Correlate enriched vulnerabilities, network telemetry, alerts, and generated detections "
+            "into coherent incident hypotheses and prioritized evidence clusters."
         ),
         backstory=(
-            "You are a vulnerability analyst for a SOC lab. You map exposed products and "
-            "versions to likely weaknesses and exploit references without giving exploit steps."
+            "You connect weak signals across scan output, Suricata alerts, Zeek sessions, and "
+            "IOC enrichment so analysts can see which findings belong to the same activity thread."
         ),
-        tools=[
-            ToolRegistry.get_tool("vulnerability_scan_tool"),
-            ToolRegistry.get_tool("exploitdb_tool"),
-            ToolRegistry.get_tool("knowledge_base_tool"),
-        ],
+        tools=configured_agent_tools("correlation_agent"),
+        llm_max_tokens=900,
+        allow_delegation=False,
+    )
+
+
+@AgentRegistry.register("prediction_agent")
+def create_prediction_agent():
+    return BaseAgentFactory.create(
+        role="Threat Prediction Agent",
+        goal=(
+            "Predict likely attacker next steps, escalation paths, and near-term risk based on "
+            "correlated threat-intelligence evidence."
+        ),
+        backstory=(
+            "You are a forward-looking SOC analyst. You convert correlated evidence into likely "
+            "attack progression scenarios, confidence levels, and defensive watchpoints."
+        ),
+        tools=configured_agent_tools("prediction_agent"),
+        llm_max_tokens=800,
         allow_delegation=False,
     )
 
@@ -46,64 +88,61 @@ def create_vulnerability_scan_agent():
 @AgentRegistry.register("reporting_agent")
 def create_reporting_agent():
     return BaseAgentFactory.create(
-        role="SOC Reporting Agent",
-        goal="Write a clear SOC report from scan and vulnerability evidence.",
+        role="Threat Intel Reporting Agent",
+        goal="Write a clear SOC report from collection, enrichment, correlation, and prediction evidence.",
         backstory=(
             "You write concise, evidence-grounded SOC reports that separate confirmed scan "
-            "facts from likely vulnerability intelligence and uncertainty."
+            "facts, enriched intelligence, correlated hypotheses, predictions, and uncertainty."
         ),
-        tools=[ToolRegistry.get_tool("knowledge_base_tool")],
+        tools=configured_agent_tools("reporting_agent"),
+        llm_max_tokens=1100,
+        allow_delegation=False,
+    )
+
+
+@AgentRegistry.register("response_agent")
+def create_response_agent():
+    return BaseAgentFactory.create(
+        role="Threat Intel Response Agent",
+        goal="Produce prioritized response and remediation actions that correct identified weaknesses safely.",
+        backstory=(
+            "You are a defensive response specialist. You translate threat-intel findings into "
+            "containment, patching, hardening, segmentation, monitoring, and validation tasks."
+        ),
+        tools=configured_agent_tools("response_agent"),
+        llm_max_tokens=900,
         allow_delegation=False,
     )
 
 
 @AgentRegistry.register("remediation_agent")
 def create_remediation_agent():
+    return create_response_agent()
+
+
+@AgentRegistry.register("tool_generation_agent")
+def create_tool_generation_agent():
     return BaseAgentFactory.create(
-        role="Remediation Agent",
-        goal="Produce prioritized remediation actions that correct the identified weaknesses safely.",
-        backstory=(
-            "You are a defensive remediation specialist. You translate SOC findings into patching, "
-            "hardening, segmentation, monitoring, and validation tasks that system owners can execute."
+        role="Threat Intel Tool Generation Agent",
+        goal=(
+            "Generate the defensive helper scripts needed for the current threat-intelligence run, "
+            "using the LLM and ingested knowledge database instead of static tool code."
         ),
-        tools=[ToolRegistry.get_tool("knowledge_base_tool")],
+        backstory=(
+            "You are the single toolsmith for the SOC crew. Every run, you decide what helper "
+            "scripts are needed from the evidence and write fresh, reviewable scripts that default "
+            "to dry-run behavior and avoid offensive exploitation, credential attacks, persistence, "
+            "and destructive actions."
+        ),
+        tools=configured_agent_tools("tool_generation_agent"),
+        llm_max_tokens=1600,
         allow_delegation=False,
     )
 
 
 @AgentRegistry.register("remediation_script_generation_agent")
 def create_remediation_script_generation_agent():
-    return BaseAgentFactory.create(
-        role="Remediation Script Generation Agent",
-        goal=(
-            "Generate safe defensive remediation and validation scripts from scan findings, "
-            "without embedding offensive exploitation steps."
-        ),
-        backstory=(
-            "You are an automation engineer for a SOC lab. You convert remediation plans into "
-            "reviewable scripts that default to dry-run behavior and require explicit operator "
-            "approval before changing services or firewall rules."
-        ),
-        tools=[],
-        allow_delegation=False,
-    )
-
-
-@AgentRegistry.register("red_team_recon_agent")
-def create_red_team_recon_agent():
-    return BaseAgentFactory.create(
-        role="Red Team Recon Agent",
-        goal=(
-            "Run authorized lab enumeration and preserve service evidence for controlled "
-            "exploitability validation."
-        ),
-        backstory=(
-            "You are a red-team reconnaissance operator working in an approved lab. You gather "
-            "only the evidence needed to choose safe validation paths and avoid broad, noisy scans."
-        ),
-        tools=[ToolRegistry.get_tool("nmap_tool")],
-        allow_delegation=False,
-    )
+    return create_tool_generation_agent()
 
 
 @AgentRegistry.register("red_team_exploit_planner_agent")
@@ -119,11 +158,8 @@ def create_red_team_exploit_planner_agent():
             "findings into reproducible validation steps while minimizing impact and avoiding "
             "persistence, credential theft, or destructive actions."
         ),
-        tools=[
-            ToolRegistry.get_tool("vulnerability_scan_tool"),
-            ToolRegistry.get_tool("exploitdb_tool"),
-            ToolRegistry.get_tool("knowledge_base_tool"),
-        ],
+        tools=configured_agent_tools("red_team_exploit_planner_agent"),
+        llm_max_tokens=700,
         allow_delegation=False,
     )
 
@@ -141,7 +177,8 @@ def create_red_team_tool_generation_agent():
             "authorized labs, record all commands, and keep exploit validation bounded to the "
             "provided target and ports."
         ),
-        tools=[],
+        tools=configured_agent_tools("red_team_tool_generation_agent"),
+        llm_max_tokens=1600,
         allow_delegation=False,
     )
 
@@ -155,6 +192,7 @@ def create_red_team_reporting_agent():
             "You write concise red-team validation reports for defenders. You distinguish "
             "confirmed evidence, likely exploitability, skipped checks, and tooling gaps."
         ),
-        tools=[ToolRegistry.get_tool("knowledge_base_tool")],
+        tools=configured_agent_tools("red_team_reporting_agent"),
+        llm_max_tokens=900,
         allow_delegation=False,
     )

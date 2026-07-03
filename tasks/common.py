@@ -1,0 +1,5 @@
+CONCISE_LOCAL_FIRST = (
+    "/no_think. Do not output hidden reasoning, thinking tags, or analysis traces. "
+    "Use local evidence first: provided scan/report context, previous run excerpts, and configured database tools. "
+    "Only ask the LLM to infer or generate what is not already present locally. Be brief, factual, and avoid repeating input."
+)

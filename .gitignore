@@ -10,6 +10,8 @@ cti/
 outputs/
 data/
 validation-output/
+labs/
+*.log
 services/misp-docker/.git/
 services/misp-docker/configs/
 services/misp-docker/files/
