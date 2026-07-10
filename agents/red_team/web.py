@@ -12,7 +12,7 @@ def create_red_team_web_attack_agent():
             "exploitability validation paths."
         ),
         backstory=(
-            "You are a web application and web service tester in an approved lab. You focus on "
+            "You are a web application and web service tester in an authorized environment. You focus on "
             "non-destructive checks such as exposed admin surfaces, default credential validation, "
             "dangerous HTTP methods, and known vulnerable web middleware."
         ),

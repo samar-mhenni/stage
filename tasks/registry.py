@@ -26,8 +26,3 @@ class TaskRegistry:
         
         logger.info(f"Instantiating task: {name}")
         return cls._registry[name](**kwargs)
-
-# Example registration:
-# @TaskRegistry.register("recon_task")
-# def create_recon_task(agent):
-#     return Task(description="...", expected_output="...", agent=agent)

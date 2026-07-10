@@ -30,8 +30,3 @@ class AgentRegistry:
     @classmethod
     def get_all_agent_names(cls) -> list[str]:
         return list(cls._registry.keys())
-
-# Example registration for future agents:
-# @AgentRegistry.register("campaign_orchestrator")
-# def create_orchestrator():
-#     return BaseAgentFactory.create(role="Orchestrator", goal="...", backstory="...")

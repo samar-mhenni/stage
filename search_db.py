@@ -16,6 +16,7 @@ print("Connecting to local ChromaDB...")
 client = chromadb.PersistentClient(path="./chroma_db")
 
 collections_map = {
+    "intel": "threat_intel_db",
     "attack": "attack_db",
     "redteam": "redteam_db",
     "actor": "actor_db",
@@ -25,6 +26,7 @@ collections_map = {
 def print_help():
     print("\nAvailable commands:")
     print("  search <query>       → search all collections")
+    print("  intel <query>        → search local threat_intel_db")
     print("  attack <query>       → search attack_db")
     print("  redteam <query>      → search redteam_db")
     print("  actor <query>        → search actor_db")

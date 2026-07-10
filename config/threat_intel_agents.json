@@ -21,7 +21,7 @@
       "red_team_reporting_agent"
     ],
     "agent_modules": {
-      "red_team_recon_agent": "agents.red_team_recon_agent"
+      "red_team_recon_agent": "agents.red_team.recon"
     },
     "generated_tools": {
       "active_args": ["--execute"]
@@ -29,27 +29,27 @@
     "specialists": {
       "web": {
         "agent": "red_team_web_attack_agent",
-        "agent_module": "agents.red_team_web_agent",
+        "agent_module": "agents.red_team.web",
         "planning_task": "red_team_web_planning_task",
-        "task_module": "tasks.red_team_web_tasks"
+        "task_module": "tasks.red_team.web"
       },
       "linux": {
         "agent": "red_team_linux_attack_agent",
-        "agent_module": "agents.red_team_linux_agent",
+        "agent_module": "agents.red_team.linux",
         "planning_task": "red_team_linux_planning_task",
-        "task_module": "tasks.red_team_linux_tasks"
+        "task_module": "tasks.red_team.linux"
       },
       "windows": {
         "agent": "red_team_windows_attack_agent",
-        "agent_module": "agents.red_team_windows_agent",
+        "agent_module": "agents.red_team.windows",
         "planning_task": "red_team_windows_planning_task",
-        "task_module": "tasks.red_team_windows_tasks"
+        "task_module": "tasks.red_team.windows"
       },
       "blockchain": {
         "agent": "red_team_blockchain_attack_agent",
-        "agent_module": "agents.red_team_blockchain_agent",
+        "agent_module": "agents.red_team.blockchain",
         "planning_task": "red_team_blockchain_planning_task",
-        "task_module": "tasks.red_team_blockchain_tasks"
+        "task_module": "tasks.red_team.blockchain"
       }
     }
   },
@@ -58,6 +58,9 @@
       "tools": ["knowledge_base_tool"]
     },
     "enrichment_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "vulnerability_scan_agent": {
       "tools": ["knowledge_base_tool"]
     },
     "correlation_agent": {
@@ -72,7 +75,13 @@
     "response_agent": {
       "tools": ["knowledge_base_tool"]
     },
+    "remediation_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
     "tool_generation_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "remediation_script_generation_agent": {
       "tools": ["knowledge_base_tool"]
     },
     "red_team_recon_agent": {

@@ -10,7 +10,7 @@ def create_red_team_linux_attack_agent():
         goal="Analyze Linux and Unix network services for authorized remote validation paths.",
         backstory=(
             "You are a Linux exploitation specialist in a contained training range. You focus on "
-            "legacy daemons, exposed RPC/RMI services, and known lab-safe command validation while "
+            "legacy daemons, exposed RPC/RMI services, and known non-destructive command validation while "
             "avoiding persistence or destructive actions."
         ),
         tools=configured_agent_tools("red_team_linux_attack_agent"),

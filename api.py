@@ -7,21 +7,27 @@ from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
-import agents.intel_agents  # noqa: F401 - registers core agents
+import agents.red_team  # noqa: F401 - registers red-team agents
+import agents.threat_intel  # noqa: F401 - registers threat-intel agents
 from agents.registry import AgentRegistry
-from crew_red_team import RED_TEAM_SPECIALISTS, run_red_team_pipeline, run_red_team_specialist_pipeline
-from crew_threat_intel import DEFAULT_DB_PATH, run_threat_intel_pipeline
+from crews.red_team.pipeline import (
+    RED_TEAM_SPECIALISTS,
+    next_artifact_run_id,
+    run_dynamic_red_team_recon_stage,
+    run_red_team_pipeline,
+    run_red_team_specialist_pipeline,
+)
+from crews.threat_intel.pipeline import DEFAULT_DB_PATH, run_threat_intel_pipeline
 
 
 app = FastAPI(title="CrewAI SOC Threat Intelligence API")
 
 
 class ThreatIntelRunRequest(BaseModel):
-    target: str = Field(..., description="Authorized lab target.")
-    ports: str = Field(default="1-10000", description="Port scope metadata for the provided evidence.")
-    timeout: int = Field(default=180, ge=1, le=1200, description="Agent task timeout hint in seconds.")
+    target: str = Field(..., description="Evidence label or authorized target name.")
+    evidence_path: str = Field(default="", description="Required JSON/text logs or tool-output evidence file.")
     db_path: str = Field(default=str(DEFAULT_DB_PATH), description="SQLite output DB path.")
-    reuse_scan: str = Field(default="", description="Required existing collection/evidence JSON path.")
+    reuse_scan: str = Field(default="", description="Deprecated alias for evidence_path.")
     include_full_output: bool = Field(
         default=False,
         description="Return full reports inline. Default false returns compact metadata and artifact paths.",
@@ -50,10 +56,15 @@ class RedTeamRunRequest(BaseModel):
     target: str = Field(..., description="Authorized lab target.")
     ports: str = Field(default="1-10000", description="Nmap port expression.")
     timeout: int = Field(default=180, ge=1, le=1200, description="Nmap timeout in seconds.")
-    reuse_scan: str = Field(default="", description="Optional existing Nmap JSON path.")
+    reuse_scan: str = Field(default="", description="Deprecated; red-team recon is generated fresh every run.")
     use_agents: bool = Field(default=True, description="Deprecated compatibility field; red-team runs use LLM agents.")
     execute: bool = Field(default=False, description="Execute generated red-team validation scripts.")
     execution_timeout: int = Field(default=180, ge=1, le=1200, description="Timeout per generated script.")
+    use_lab_notes: bool = Field(
+        default=True,
+        description="Use local lab README/context when available. Set false to infer from recon/database only.",
+    )
+    environment_context: str = Field(default="", description="Optional notes about the authorized target environment.")
 
 
 class RedTeamAgentRunRequest(BaseModel):
@@ -61,7 +72,7 @@ class RedTeamAgentRunRequest(BaseModel):
     domain: str = Field(..., description="One of: web, linux, windows, blockchain.")
     ports: str = Field(default="1-10000", description="Nmap port expression if reuse_scan is not provided.")
     timeout: int = Field(default=180, ge=1, le=1200, description="Nmap timeout in seconds.")
-    reuse_scan: str = Field(default="", description="Optional existing Nmap JSON path.")
+    reuse_scan: str = Field(default="", description="Deprecated; red-team recon is generated fresh every run.")
     use_nmap_agent: bool = Field(
         default=True,
         description="Deprecated compatibility field; collection uses configured agent/database flow unless reuse_scan is provided.",
@@ -72,6 +83,17 @@ class RedTeamAgentRunRequest(BaseModel):
     )
     execute: bool = Field(default=False, description="Execute only this specialist's generated validation script.")
     execution_timeout: int = Field(default=180, ge=1, le=1200, description="Timeout for the specialist script.")
+    use_lab_notes: bool = Field(
+        default=True,
+        description="Use local lab README/context when available. Set false to infer from recon/database only.",
+    )
+    environment_context: str = Field(default="", description="Optional notes about the authorized target environment.")
+
+
+class RedTeamReconRunRequest(BaseModel):
+    target: str = Field(..., description="Authorized lab target.")
+    ports: str = Field(default="1-10000", description="Nmap port expression.")
+    timeout: int = Field(default=180, ge=1, le=1200, description="Nmap timeout in seconds.")
 
 
 def _compact_run_response(result: dict[str, Any]) -> dict[str, Any]:
@@ -96,7 +118,7 @@ def _compact_run_response(result: dict[str, Any]) -> dict[str, Any]:
         "artifact_run_id": result.get("artifact_run_id"),
         "status": result.get("status"),
         "target": result.get("target"),
-        "ports": result.get("ports"),
+        "evidence_path": result.get("evidence_path"),
         "open_port_count": len(open_ports),
         "open_ports": open_ports,
         "service_summary": result.get("service_summary"),
@@ -138,8 +160,7 @@ def run_threat_intel(request: ThreatIntelRunRequest) -> dict[str, Any]:
     try:
         result = run_threat_intel_pipeline(
             target=request.target,
-            ports=request.ports,
-            timeout=request.timeout,
+            evidence_path=request.evidence_path,
             db_path=request.db_path,
             reuse_scan=request.reuse_scan,
             include_remediation_plan=request.include_remediation_plan,
@@ -172,6 +193,8 @@ def run_red_team(request: RedTeamRunRequest) -> dict[str, Any]:
             use_agents=request.use_agents,
             execute=request.execute,
             execution_timeout=request.execution_timeout,
+            use_lab_notes=request.use_lab_notes,
+            environment_context=request.environment_context,
         )
     except Exception as exc:
         raise HTTPException(
@@ -183,6 +206,41 @@ def run_red_team(request: RedTeamRunRequest) -> dict[str, Any]:
             },
         ) from exc
     return jsonable_encoder(result)
+
+
+@app.post("/api/red-team/recon/run")
+def run_red_team_recon(request: RedTeamReconRunRequest) -> dict[str, Any]:
+    try:
+        artifact_run_id = next_artifact_run_id()
+        scan, nmap_output, recon_artifacts, execution = run_dynamic_red_team_recon_stage(
+            artifact_run_id=artifact_run_id,
+            target=request.target,
+            ports=request.ports,
+            timeout=request.timeout,
+        )
+        return jsonable_encoder(
+            {
+                "status": "success",
+                "artifact_run_id": artifact_run_id,
+                "agent": "red_team_recon_agent",
+                "target": request.target,
+                "ports": request.ports,
+                "manifest": recon_artifacts.get("manifest"),
+                "manifest_path": str(recon_artifacts.get("manifest_path")),
+                "execution": execution,
+                "scan": scan,
+                "nmap_output": nmap_output,
+            }
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "red_team_recon_run_failed",
+                "message": str(exc),
+                "type": exc.__class__.__name__,
+            },
+        ) from exc
 
 
 @app.post("/api/red-team/agents/{agent_name}/run")
@@ -207,6 +265,8 @@ def run_red_team_agent(agent_name: str, request: RedTeamAgentRunRequest) -> dict
             use_llm_agent=request.use_llm_agent,
             execute=request.execute,
             execution_timeout=request.execution_timeout,
+            use_lab_notes=request.use_lab_notes,
+            environment_context=request.environment_context,
         )
         return jsonable_encoder(result)
     except Exception as exc:

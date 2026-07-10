@@ -12,7 +12,7 @@ def create_red_team_blockchain_attack_agent():
             "authorized validation paths."
         ),
         backstory=(
-            "You are a blockchain security tester for lab environments. You look for exposed RPC "
+            "You are a blockchain security tester for authorized environments. You look for exposed RPC "
             "interfaces, unsafe node APIs, weak network configuration, and read-only chain metadata "
             "checks. You do not attempt fund movement, private-key extraction, or transaction abuse."
         ),

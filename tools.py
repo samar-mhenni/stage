@@ -11,10 +11,23 @@ import re
 # Suppress sentence_transformers logging if needed
 logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 
-# Load embedding model once
-_embedding_model = SentenceTransformer("BAAI/bge-base-en-v1.5")
-_db_client = chromadb.PersistentClient(path="./chroma_db")
+_embedding_model = None
+_db_client = None
 MAX_CONTEXT_CHARS = 700
+
+
+def _get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        _embedding_model = SentenceTransformer("BAAI/bge-base-en-v1.5")
+    return _embedding_model
+
+
+def _get_db_client():
+    global _db_client
+    if _db_client is None:
+        _db_client = chromadb.PersistentClient(path="./chroma_db")
+    return _db_client
 
 
 def _extract_mitre_id(text: str) -> str:
@@ -29,17 +42,44 @@ def _normalize_doc(doc: str) -> str:
     return doc_text
 
 
-def _format_record(record: dict) -> str:
-    header = (
-        f"[Source: {record['source']} | Type: {record['type']} | "
-        f"Name: {record['name']} | Match: {record['match']:.4f}]"
-    )
-    return f"{header}\n{record['text']}"
-
-
 def _distance_to_match_score(distance: float) -> float:
     """Convert Chroma distance to a high-is-better match score for reporting."""
     return 1 / (1 + (distance / 2))
+
+
+def _record_from_doc(coll_name: str, doc: str, meta: dict, match: float = 1.0, distance: float = 0.0) -> dict:
+    obj_type = meta.get("type", "unknown")
+    name = meta.get("name", "unknown")
+    doc_text = _normalize_doc(doc)
+    cve = meta.get("cve", "")
+    cve_str = f" | CVE: {cve}" if cve else ""
+    return {
+        "source": coll_name,
+        "type": obj_type,
+        "name": name,
+        "match": match,
+        "distance": distance,
+        "text": doc_text,
+        "mitre_id": meta.get("mitre_id") or _extract_mitre_id(doc_text),
+        "cve_str": cve_str,
+    }
+
+
+def get_records_by_metadata(collection: str, field: str, values: set[str] | list[str]) -> list[dict]:
+    """Return exact metadata matches without embedding search."""
+    records = []
+    try:
+        coll = _get_db_client().get_collection(collection)
+    except Exception:
+        return records
+    for value in values:
+        try:
+            results = coll.get(where={field: str(value)}, include=["documents", "metadatas"])
+        except Exception:
+            continue
+        for doc, meta in zip(results.get("documents", []), results.get("metadatas", [])):
+            records.append(_record_from_doc(collection, doc, meta, match=1.0, distance=0.0))
+    return records
 
 
 def search_records(
@@ -49,36 +89,28 @@ def search_records(
     type_filters: dict[str, set[str]] | None = None,
 ) -> list[dict]:
     """Return structured vector search records for deterministic filtering."""
-    query_embedding = _embedding_model.encode(query, show_progress_bar=False).tolist()
+    query_embedding = _get_embedding_model().encode(query, show_progress_bar=False).tolist()
     records = []
+    client = _get_db_client()
 
     for coll_name in collections:
         try:
-            coll = _db_client.get_collection(coll_name)
+            coll = client.get_collection(coll_name)
             results = coll.query(query_embeddings=[query_embedding], n_results=top_k)
             for idx, doc in enumerate(results["documents"][0]):
                 meta = results["metadatas"][0][idx]
                 obj_type = meta.get("type", "unknown")
                 if type_filters and coll_name in type_filters and obj_type not in type_filters[coll_name]:
                     continue
-                name = meta.get("name", "unknown")
-                doc_text = _normalize_doc(doc)
-                
-                # Exploit-DB Specific Fields
-                cve = meta.get("cve", "")
-                cve_str = f" | CVE: {cve}" if cve else ""
-                
+                distance = float(results["distances"][0][idx])
                 records.append(
-                    {
-                        "source": coll_name,
-                        "type": obj_type,
-                        "name": name,
-                        "match": _distance_to_match_score(float(results["distances"][0][idx])),
-                        "distance": float(results["distances"][0][idx]),
-                        "text": doc_text,
-                        "mitre_id": _extract_mitre_id(doc_text),
-                        "cve_str": cve_str
-                    }
+                    _record_from_doc(
+                        coll_name,
+                        doc,
+                        meta,
+                        match=_distance_to_match_score(distance),
+                        distance=distance,
+                    )
                 )
         except Exception:
             pass
@@ -117,8 +149,8 @@ def _prioritize_exploit_db(query: str) -> list[str]:
     is_exploit_heavy = re.search(r"cve-\d{4}-\d+", query_lower) or any(k in query_lower for k in exploit_keywords)
     
     if is_exploit_heavy:
-        return ["exploit_db", "redteam_db", "attack_db", "actor_db"]
-    return ["redteam_db", "attack_db", "actor_db", "exploit_db"]
+        return ["exploit_db", "threat_intel_db", "redteam_db", "attack_db", "actor_db"]
+    return ["redteam_db", "threat_intel_db", "attack_db", "actor_db", "exploit_db"]
 
 
 def red_team_database_search(query: str) -> str:
@@ -131,7 +163,7 @@ def threat_intel_database_search(query: str) -> str:
     """Search threat-intel relevant collections."""
     return _search_collections(
         query,
-        ["detection_db", "attack_db"],
+        ["threat_intel_db", "detection_db", "attack_db", "actor_db"],
         type_filters={"attack_db": {"attack-pattern"}},
     )
 

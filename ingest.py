@@ -288,10 +288,82 @@ def ingest_exploit_db(limit=None):
 
     print("✅ Exploit-DB Ingestion complete!")
 
+
+def ingest_local_threat_data():
+    print("\n--- Starting Local Threat Data Ingestion ---")
+    data_files = [
+        ("threat_data/1_otx_threat_intel.csv", "otx_pulse"),
+        ("threat_data/2_cve_vulnerabilities.csv", "cve_vulnerability"),
+        ("threat_data/3_malicious_domains.csv", "malicious_domain"),
+        ("threat_data/4_malicious_ips.csv", "malicious_ip"),
+    ]
+
+    try:
+        client.delete_collection("threat_intel_db")
+    except Exception:
+        pass
+    threat_intel_db = client.create_collection("threat_intel_db")
+    docs = []
+    ids = []
+    metas = []
+
+    def clean_value(value) -> str:
+        text = str(value)
+        return "" if text.lower() == "nan" else text.strip()
+
+    for csv_path, record_type in data_files:
+        if not os.path.isfile(csv_path):
+            print(f"Skipping missing file: {csv_path}")
+            continue
+
+        df = pd.read_csv(csv_path).fillna("")
+        print(f"Parsing {csv_path} ({len(df)} rows)...")
+        for index, row in df.iterrows():
+            fields = {column: clean_value(row.get(column, "")) for column in df.columns}
+            title = (
+                fields.get("Title")
+                or fields.get("cveID")
+                or fields.get("Domain")
+                or fields.get("IP")
+                or f"{record_type}_{index}"
+            )
+            doc = "\n".join(f"{key}: {value}" for key, value in fields.items() if value)
+            doc_id = f"{record_type}_{index}"
+            docs.append(doc[:4000])
+            ids.append(doc_id)
+            metas.append(
+                {
+                    "source": csv_path,
+                    "type": record_type,
+                    "name": str(title)[:120],
+                }
+            )
+
+    if not docs:
+        print("No new local threat data rows found.")
+        return
+
+    BATCH_SIZE = 256
+    print(f"\nEmbedding and indexing Local Threat Data ({len(docs)} docs)...")
+    for i in tqdm(range(0, len(docs), BATCH_SIZE), desc="Local Threat Data"):
+        batch_docs = docs[i:i + BATCH_SIZE]
+        batch_ids = ids[i:i + BATCH_SIZE]
+        batch_metas = metas[i:i + BATCH_SIZE]
+        embeddings = model.encode(batch_docs, show_progress_bar=False).tolist()
+        threat_intel_db.add(
+            documents=batch_docs,
+            embeddings=embeddings,
+            ids=batch_ids,
+            metadatas=batch_metas,
+        )
+
+    print("✅ Local Threat Data Ingestion complete!")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ingest threat intelligence data into ChromaDB")
     parser.add_argument("--mitre", action="store_true", help="Ingest MITRE ATT&CK data")
     parser.add_argument("--exploitdb", action="store_true", help="Ingest Exploit-DB data")
+    parser.add_argument("--local-threat-data", action="store_true", help="Ingest local CSVs from threat_data/")
     parser.add_argument("--limit-exploits", type=int, default=None, help="Limit number of exploits ingested (for testing)")
     parser.add_argument("--all", action="store_true", help="Ingest all available datasets")
     
@@ -302,6 +374,9 @@ if __name__ == "__main__":
         
     if args.all or args.exploitdb:
         ingest_exploit_db(limit=args.limit_exploits)
+
+    if args.all or args.local_threat_data:
+        ingest_local_threat_data()
         
-    if not (args.all or args.mitre or args.exploitdb):
-        print("Please specify a dataset to ingest: --mitre, --exploitdb, or --all")
+    if not (args.all or args.mitre or args.exploitdb or args.local_threat_data):
+        print("Please specify a dataset to ingest: --mitre, --exploitdb, --local-threat-data, or --all")

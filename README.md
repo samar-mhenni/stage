@@ -4,25 +4,27 @@ Focused CrewAI workflow for authorized Metasploitable lab analysis.
 
 The supported threat-intel crew path is:
 
-1. `collection_agent` collects authorized service and telemetry evidence.
-2. `enrichment_agent` enriches scan evidence with vulnerability, ExploitDB, IOC, and knowledge-base context.
+1. Provided tool logs/evidence are loaded from `--evidence-path`.
+2. `enrichment_agent` enriches the evidence with vulnerability, ExploitDB, IOC, and knowledge-base context.
 3. `correlation_agent` correlates vulnerabilities, alerts, logs, and generated detections.
 4. `prediction_agent` predicts likely attacker next steps and defensive watchpoints.
 5. `reporting_agent` writes the SOC threat-intelligence report.
 6. `response_agent` writes response and remediation actions.
 7. The full result is saved to SQLite in `outputs/threat_intel_results.db`.
 
-Backward-compatible aliases still exist for older code paths:
-
-- `nmap_scan_agent` maps to `collection_agent`.
-- `vulnerability_scan_agent` maps to `enrichment_agent`.
-- `remediation_agent` maps to `response_agent`.
+Backward-compatible aliases still exist for older code paths where they are still used.
 
 The existing LLM and vector settings are preserved in `config/settings.py`:
 
 - `OPENROUTER_API_KEY`
 - `OPENROUTER_BASE_URL`
 - `QWEN_MODEL`
+
+Local CSV threat data is ingested into `threat_intel_db`:
+
+```bash
+python ingest.py --local-threat-data
+```
 - `CHROMADB_PATH`
 
 ## Install
@@ -165,8 +167,7 @@ outputs/runs/run_0001/web_agent/manifest.json
 outputs/runs/run_0001/web_agent/execution/execution_results.json
 ```
 
-Use `reuse_scan` only when you intentionally want to skip enumeration and replay a previous scan.
-Set `use_nmap_agent:false` if you want direct `nmap_tool` execution instead of `nmap_scan_agent`.
+For threat-intel runs, use `--evidence-path` with JSON/text logs or tool output. `reuse_scan` is kept only as a deprecated alias for older callers.
 
 List saved runs:
 
@@ -188,18 +189,11 @@ Results are stored in:
 outputs/threat_intel_results.db
 ```
 
-Each run also writes old-style file artifacts:
+Threat-intel runs write a compact artifact set:
 
 ```text
 outputs/runs/run_0001/threat_intel_output.md
-outputs/runs/run_0001/nmap_scan.json
-outputs/runs/run_0001/service_summary.txt
-outputs/runs/run_0001/vulnerability_report.md
-outputs/runs/run_0001/correlation_report.md
-outputs/runs/run_0001/prediction_report.md
-outputs/runs/run_0001/soc_report.md
-outputs/runs/run_0001/remediation_plan.md
-outputs/runs/run_0001/nmap_agent_output.txt
+outputs/runs/run_0001/evidence.json
 ```
 
 Table:
