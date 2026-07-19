@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 
-from tools import RedTeamSearchTool, ThreatIntelSearchTool
+from generated_tool_runtime import build_generated_tool
 
 
 DEFAULT_AGENT_CONFIG_PATH = Path("config/threat_intel_agents.json")
@@ -23,11 +23,7 @@ def configured_tool_names(agent_name: str) -> list[str]:
 
 
 def load_registered_tool(tool_name: str):
-    if tool_name in {"knowledge_base_tool", "threat_intel_database_search"}:
-        return ThreatIntelSearchTool()
-    if tool_name == "red_team_database_search":
-        return RedTeamSearchTool()
-    raise ValueError(f"Unknown configured database tool: {tool_name}")
+    return build_generated_tool(tool_name)
 
 
 def configured_agent_tools(agent_name: str):

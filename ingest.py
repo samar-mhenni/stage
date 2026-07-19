@@ -289,6 +289,59 @@ def ingest_exploit_db(limit=None):
     print("✅ Exploit-DB Ingestion complete!")
 
 
+def ingest_web_attack_signatures(path: str = "threat_data/web_attack_signatures.json"):
+    print("\n--- Starting Web Attack Signature Ingestion ---")
+    if not os.path.isfile(path):
+        print(f"Skipping missing file: {path}")
+        return
+
+    try:
+        redteam_db = client.get_collection("redteam_db")
+    except Exception:
+        redteam_db = client.create_collection("redteam_db")
+
+    with open(path, "r", encoding="utf-8") as handle:
+        signatures = json.load(handle)
+
+    docs = []
+    ids = []
+    metas = []
+    for index, signature in enumerate(signatures):
+        name = str(signature.get("name", f"web_signature_{index}"))
+        terms = signature.get("terms", [])
+        markers = signature.get("markers", [])
+        version_patterns = signature.get("version_patterns", [])
+        attack_notes = str(signature.get("attack_notes", ""))
+        doc = (
+            f"Name: {name}\n"
+            "Type: web_app_signature\n"
+            f"Terms: {', '.join(terms)}\n"
+            f"Fingerprint markers: {', '.join(markers)}\n"
+            f"Version extraction patterns: {', '.join(version_patterns)}\n"
+            f"Validation guidance: {attack_notes}"
+        )
+        docs.append(doc[:4000])
+        ids.append(f"web_app_signature_{index}_{name.lower().replace(' ', '_').replace('/', '_')}")
+        metas.append(
+            {
+                "source": path,
+                "type": "web_app_signature",
+                "name": name,
+                "terms_json": json.dumps(terms),
+                "markers_json": json.dumps(markers),
+                "version_patterns_json": json.dumps(version_patterns),
+            }
+        )
+
+    if not docs:
+        print("No web attack signatures found.")
+        return
+
+    embeddings = model.encode(docs, show_progress_bar=False).tolist()
+    redteam_db.upsert(documents=docs, embeddings=embeddings, ids=ids, metadatas=metas)
+    print(f"✅ Web Attack Signature Ingestion complete! ({len(docs)} signatures)")
+
+
 def ingest_local_threat_data():
     print("\n--- Starting Local Threat Data Ingestion ---")
     data_files = [
@@ -296,6 +349,7 @@ def ingest_local_threat_data():
         ("threat_data/2_cve_vulnerabilities.csv", "cve_vulnerability"),
         ("threat_data/3_malicious_domains.csv", "malicious_domain"),
         ("threat_data/4_malicious_ips.csv", "malicious_ip"),
+        ("threat_data/5_validation_guidance.csv", "validation_guidance"),
     ]
 
     try:
@@ -364,6 +418,7 @@ if __name__ == "__main__":
     parser.add_argument("--mitre", action="store_true", help="Ingest MITRE ATT&CK data")
     parser.add_argument("--exploitdb", action="store_true", help="Ingest Exploit-DB data")
     parser.add_argument("--local-threat-data", action="store_true", help="Ingest local CSVs from threat_data/")
+    parser.add_argument("--web-signatures", action="store_true", help="Ingest web attack fingerprint signatures into redteam_db")
     parser.add_argument("--limit-exploits", type=int, default=None, help="Limit number of exploits ingested (for testing)")
     parser.add_argument("--all", action="store_true", help="Ingest all available datasets")
     
@@ -377,6 +432,9 @@ if __name__ == "__main__":
 
     if args.all or args.local_threat_data:
         ingest_local_threat_data()
+
+    if args.all or args.mitre or args.web_signatures:
+        ingest_web_attack_signatures()
         
-    if not (args.all or args.mitre or args.exploitdb or args.local_threat_data):
-        print("Please specify a dataset to ingest: --mitre, --exploitdb, --local-threat-data, or --all")
+    if not (args.all or args.mitre or args.exploitdb or args.local_threat_data or args.web_signatures):
+        print("Please specify a dataset to ingest: --mitre, --exploitdb, --local-threat-data, --web-signatures, or --all")

@@ -1,0 +1,91 @@
+{
+  "source_tool": "misp",
+  "export_type": "misp_event_fixture",
+  "generated_at": "2026-07-13T14:22:00+02:00",
+  "Event": {
+    "id": "900001",
+    "uuid": "11111111-2222-4333-8444-555555555555",
+    "orgc": {
+      "name": "Synthetic SOC Lab"
+    },
+    "info": "Lab indicators for Joomla CVE-2023-23752 exposure",
+    "date": "2026-07-13",
+    "threat_level_id": "2",
+    "analysis": "1",
+    "distribution": "0",
+    "Tag": [
+      {
+        "name": "tlp:amber"
+      },
+      {
+        "name": "misp-galaxy:mitre-attack-pattern=\"Exploit Public-Facing Application - T1190\""
+      },
+      {
+        "name": "misp-galaxy:mitre-attack-pattern=\"Gather Victim Host Information - T1592\""
+      },
+      {
+        "name": "cve:CVE-2023-23752"
+      }
+    ],
+    "Attribute": [
+      {
+        "type": "ip-dst",
+        "category": "Network activity",
+        "to_ids": false,
+        "value": "172.21.0.3",
+        "comment": "Affected internal lab web host"
+      },
+      {
+        "type": "ip-src",
+        "category": "Network activity",
+        "to_ids": true,
+        "value": "192.0.2.45",
+        "comment": "Synthetic source IP from documentation range"
+      },
+      {
+        "type": "url",
+        "category": "Network activity",
+        "to_ids": true,
+        "value": "http://172.21.0.3/api/index.php/v1/config/application?public=true",
+        "comment": "Joomla CVE-2023-23752 validation endpoint"
+      },
+      {
+        "type": "vulnerability",
+        "category": "External analysis",
+        "to_ids": true,
+        "value": "CVE-2023-23752",
+        "comment": "Improper access control in Joomla webservice endpoints"
+      },
+      {
+        "type": "text",
+        "category": "Payload delivery",
+        "to_ids": false,
+        "value": "GET /api/index.php/v1/config/application?public=true",
+        "comment": "Observed HTTP request pattern"
+      }
+    ],
+    "Object": [
+      {
+        "name": "vulnerability",
+        "meta-category": "vulnerability",
+        "Attribute": [
+          {
+            "object_relation": "id",
+            "type": "vulnerability",
+            "value": "CVE-2023-23752"
+          },
+          {
+            "object_relation": "software",
+            "type": "text",
+            "value": "Joomla 4.2.7"
+          },
+          {
+            "object_relation": "cvss-score",
+            "type": "float",
+            "value": "7.5"
+          }
+        ]
+      }
+    ]
+  }
+}

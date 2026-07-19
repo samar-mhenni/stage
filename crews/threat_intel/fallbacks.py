@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 
 
@@ -56,29 +57,6 @@ def local_prediction_fallback(target: str, vulnerability_context: str) -> str:
     )
 
 
-def local_soc_report_fallback(
-    target: str,
-    service_summary: str,
-    vulnerability_context: str,
-    correlation_report: str,
-    prediction_report: str,
-) -> str:
-    return (
-        "# SOC Threat Intelligence Report\n\n"
-        f"Target: {target}\n\n"
-        "## Summary\n"
-        "This report was generated from local scan evidence because an LLM stage returned no output.\n\n"
-        "## Services\n"
-        f"{service_summary}\n\n"
-        "## Top Risks\n"
-        f"{_truncate(vulnerability_context, 1200)}\n\n"
-        "## Correlation\n"
-        f"{_truncate(correlation_report, 900)}\n\n"
-        "## Prediction\n"
-        f"{_truncate(prediction_report, 700)}\n"
-    )
-
-
 def local_remediation_fallback(target: str, vulnerability_context: str) -> str:
     return (
         f"Local remediation fallback for {target}:\n"
@@ -99,6 +77,11 @@ def local_tool_manifest_fallback(target: str, scan_context: str) -> dict[str, An
     endpoints = []
     if isinstance(scan.get("iocs"), dict):
         endpoints.extend(str(url) for url in scan["iocs"].get("urls", []) if url)
+    raw_text = scan_context
+    endpoints.extend(re.findall(r"https?://[^\s\"'<>\\\]]+", raw_text))
+    host_ports = re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}:\d+\b", raw_text)
+    if not endpoints:
+        endpoints.extend(f"http://{host_port}/" for host_port in host_ports)
     for event in scan.get("events", []) if isinstance(scan.get("events"), list) else []:
         if not isinstance(event, dict):
             continue
@@ -109,6 +92,10 @@ def local_tool_manifest_fallback(target: str, scan_context: str) -> dict[str, An
             scheme = "https" if port == "443" else "http"
             port_suffix = "" if port in {"", "80", "443"} else f":{port}"
             endpoints.append(f"{scheme}://{host}{port_suffix}{path}")
+    if host_ports:
+        target_endpoints = [endpoint for endpoint in endpoints if any(host_port in endpoint for host_port in host_ports)]
+        if target_endpoints:
+            endpoints = target_endpoints
     endpoints = list(dict.fromkeys(endpoints))[:5]
     service_lines = [
         f"{item.get('host', target)}:{item.get('port')}/{item.get('protocol', 'tcp')} "
@@ -121,8 +108,10 @@ def local_tool_manifest_fallback(target: str, scan_context: str) -> dict[str, An
             f"{env.get('host_ip', scan.get('target', target))}:{env.get('port', '')} "
             f"{env.get('service', 'unknown')} {env.get('server_header', '')} {env.get('x_powered_by', '')}".strip()
         )
+    if not service_lines and host_ports:
+        service_lines.append(f"Observed endpoints mention: {', '.join(dict.fromkeys(host_ports[:5]))}")
     evidence = "\\n".join(service_lines) if service_lines else "No service details were available."
-    endpoint_block = "\n".join(f'  "{endpoint}"' for endpoint in endpoints)
+    endpoint_block = "\n".join(f"  {json.dumps(endpoint)}" for endpoint in endpoints)
     body = f"""#!/usr/bin/env bash
 set -uo pipefail
 

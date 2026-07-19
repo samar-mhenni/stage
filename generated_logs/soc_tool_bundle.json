@@ -1,0 +1,314 @@
+{
+  "target": "172.21.0.3",
+  "source": "generated_logs/soc_tool_bundle.json",
+  "evidence_type": "soc_tool_export_bundle",
+  "case_id": "SOC-JOOMLA-20260713-001",
+  "generated_at": "2026-07-13T14:25:00+02:00",
+  "summary": "Synthetic SOC/threat-intel tool exports for a lab Joomla CVE-2023-23752 incident. The bundle combines Wazuh, TheHive, MISP, and Cortex-style evidence so the threat-intel pipeline can run from one evidence file.",
+  "tools": [
+    "wazuh",
+    "thehive",
+    "misp",
+    "cortex"
+  ],
+  "scope_note": "All non-private external indicators use documentation ranges or example domains. This is fake training data, not real incident telemetry.",
+  "environment": {
+    "asset_role": "lab_web_application",
+    "host_ip": "172.21.0.3",
+    "hostname": "lab-joomla-web01",
+    "service": "http",
+    "port": 80,
+    "application": "Joomla",
+    "observed_version": "4.2.7",
+    "server_header": "Apache/2.4.54 (Debian)",
+    "x_powered_by": "PHP/7.4.33"
+  },
+  "wazuh_alerts": [
+    {
+      "timestamp": "2026-07-13T14:03:11.882+0200",
+      "rule": {
+        "id": "31151",
+        "level": 12,
+        "description": "Web application attack: suspicious Joomla API configuration endpoint access",
+        "groups": [
+          "web",
+          "attack",
+          "joomla"
+        ],
+        "mitre": {
+          "id": [
+            "T1190",
+            "T1592"
+          ],
+          "tactic": [
+            "Initial Access",
+            "Reconnaissance"
+          ],
+          "technique": [
+            "Exploit Public-Facing Application",
+            "Gather Victim Host Information"
+          ]
+        }
+      },
+      "agent": {
+        "id": "007",
+        "name": "lab-joomla-web01",
+        "ip": "172.21.0.3"
+      },
+      "decoder": {
+        "name": "apache-accesslog"
+      },
+      "location": "/var/log/apache2/access.log",
+      "data": {
+        "srcip": "192.0.2.45",
+        "dstip": "172.21.0.3",
+        "srcport": "51842",
+        "dstport": "80",
+        "http_method": "GET",
+        "url": "/api/index.php/v1/config/application?public=true",
+        "status": "200",
+        "user_agent": "Mozilla/5.0 synthetic-lab-probe",
+        "cve": "CVE-2023-23752",
+        "application": "Joomla",
+        "confidence": "high"
+      }
+    },
+    {
+      "timestamp": "2026-07-13T14:04:02.214+0200",
+      "rule": {
+        "id": "23505",
+        "level": 10,
+        "description": "Vulnerability detector: installed Joomla version is affected by CVE-2023-23752",
+        "groups": [
+          "vulnerability-detector",
+          "cve",
+          "joomla"
+        ],
+        "mitre": {
+          "id": [
+            "T1190"
+          ],
+          "tactic": [
+            "Initial Access"
+          ],
+          "technique": [
+            "Exploit Public-Facing Application"
+          ]
+        }
+      },
+      "agent": {
+        "id": "007",
+        "name": "lab-joomla-web01",
+        "ip": "172.21.0.3"
+      },
+      "location": "vulnerability-detector",
+      "data": {
+        "package": {
+          "name": "joomla",
+          "version": "4.2.7"
+        },
+        "vulnerability": {
+          "cve": "CVE-2023-23752",
+          "severity": "High",
+          "cvss3_score": "7.5",
+          "status": "Active"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-13T14:06:49.039+0200",
+      "rule": {
+        "id": "5710",
+        "level": 7,
+        "description": "Multiple authentication failures from same source",
+        "groups": [
+          "authentication_failed",
+          "ssh"
+        ],
+        "mitre": {
+          "id": [
+            "T1110"
+          ],
+          "tactic": [
+            "Credential Access"
+          ],
+          "technique": [
+            "Brute Force"
+          ]
+        }
+      },
+      "agent": {
+        "id": "011",
+        "name": "lab-admin-host",
+        "ip": "172.21.0.10"
+      },
+      "location": "/var/log/auth.log",
+      "data": {
+        "srcip": "192.0.2.45",
+        "dstip": "172.21.0.10",
+        "dstport": "22",
+        "user": "admin",
+        "action": "failed-password",
+        "attempts": 8,
+        "confidence": "medium"
+      }
+    }
+  ],
+  "thehive_case": {
+    "_id": "case~SOC-JOOMLA-20260713-001",
+    "caseId": 427,
+    "title": "Possible exploitation of Joomla CVE-2023-23752 on lab web application",
+    "severity": 3,
+    "tlp": 2,
+    "pap": 2,
+    "status": "Open",
+    "stage": "Triage",
+    "tags": [
+      "lab",
+      "joomla",
+      "CVE-2023-23752",
+      "T1190",
+      "wazuh"
+    ],
+    "observables": [
+      {
+        "dataType": "ip",
+        "data": "172.21.0.3",
+        "message": "Affected Joomla lab host",
+        "ioc": false
+      },
+      {
+        "dataType": "ip",
+        "data": "192.0.2.45",
+        "message": "Synthetic source requesting the vulnerable Joomla API endpoint",
+        "ioc": true
+      },
+      {
+        "dataType": "url",
+        "data": "http://172.21.0.3/api/index.php/v1/config/application?public=true",
+        "message": "Unauthenticated Joomla application configuration endpoint",
+        "ioc": true
+      },
+      {
+        "dataType": "other",
+        "data": "CVE-2023-23752",
+        "message": "Joomla improper access control vulnerability",
+        "ioc": true
+      }
+    ],
+    "tasks": [
+      {
+        "title": "Validate exposed endpoint",
+        "status": "Completed",
+        "logs": [
+          "Endpoint returned Joomla JSON application keys. Secrets were redacted in evidence."
+        ]
+      },
+      {
+        "title": "Enrich indicators",
+        "status": "InProgress",
+        "logs": [
+          "Mapped activity to MITRE ATT&CK T1190 and T1592."
+        ]
+      },
+      {
+        "title": "Recommend response",
+        "status": "Waiting",
+        "logs": []
+      }
+    ]
+  },
+  "misp_event": {
+    "info": "Lab indicators for Joomla CVE-2023-23752 exposure",
+    "date": "2026-07-13",
+    "threat_level_id": "2",
+    "analysis": "1",
+    "tags": [
+      "tlp:amber",
+      "cve:CVE-2023-23752",
+      "misp-galaxy:mitre-attack-pattern=\"Exploit Public-Facing Application - T1190\"",
+      "misp-galaxy:mitre-attack-pattern=\"Gather Victim Host Information - T1592\""
+    ],
+    "attributes": [
+      {
+        "type": "ip-dst",
+        "value": "172.21.0.3",
+        "to_ids": false,
+        "comment": "Affected internal lab web host"
+      },
+      {
+        "type": "ip-src",
+        "value": "192.0.2.45",
+        "to_ids": true,
+        "comment": "Synthetic source IP from documentation range"
+      },
+      {
+        "type": "url",
+        "value": "http://172.21.0.3/api/index.php/v1/config/application?public=true",
+        "to_ids": true,
+        "comment": "Joomla CVE-2023-23752 validation endpoint"
+      },
+      {
+        "type": "vulnerability",
+        "value": "CVE-2023-23752",
+        "to_ids": true,
+        "comment": "Improper access control in Joomla webservice endpoints"
+      }
+    ]
+  },
+  "cortex_analyzer_results": [
+    {
+      "analyzer": "Urlscan_Synthetic_1_0",
+      "status": "Success",
+      "observable": "http://172.21.0.3/api/index.php/v1/config/application?public=true",
+      "verdict": "suspicious",
+      "matched_patterns": [
+        "api/index.php/v1/config/application",
+        "public=true",
+        "application configuration keys"
+      ],
+      "sensitive_values": "redacted"
+    },
+    {
+      "analyzer": "CVE_Search_Synthetic_1_0",
+      "status": "Success",
+      "observable": "CVE-2023-23752",
+      "verdict": "high",
+      "product": "Joomla",
+      "affected_versions": "4.0.0 through 4.2.7",
+      "fixed_versions": [
+        "4.2.8"
+      ],
+      "attack_techniques": [
+        "T1190",
+        "T1592"
+      ]
+    }
+  ],
+  "iocs": {
+    "ips": [
+      "172.21.0.3",
+      "172.21.0.10",
+      "192.0.2.45"
+    ],
+    "domains": [
+      "lab-joomla.example.invalid"
+    ],
+    "urls": [
+      "http://172.21.0.3/api/index.php/v1/config/application?public=true"
+    ],
+    "cves": [
+      "CVE-2023-23752"
+    ],
+    "attack_techniques": [
+      "T1190",
+      "T1592",
+      "T1110"
+    ]
+  },
+  "analyst_notes": [
+    "Use this bundle when you want the threat-intel agent to analyze SOC-tool evidence instead of raw scanner output.",
+    "The Wazuh alerts establish detection context, TheHive carries case/observable context, MISP carries IOC context, and Cortex carries enrichment context.",
+    "No nmap scan is required by the threat-intel pipeline for this evidence."
+  ]
+}

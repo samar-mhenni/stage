@@ -1,0 +1,164 @@
+{
+  "target": "172.21.0.3",
+  "source": "generated_logs/joomla_cve_2023_23752_incident.json",
+  "evidence_type": "generated_tool_logs",
+  "case_id": "TI-JOOMLA-20260710-001",
+  "generated_at": "2026-07-10T10:30:00+02:00",
+  "summary": "Synthetic but realistic SOC logs generated from the authorized local Vulhub Joomla validation run. Sensitive values are redacted.",
+  "environment": {
+    "asset_role": "lab_web_application",
+    "host_ip": "172.21.0.3",
+    "service": "http",
+    "port": 80,
+    "server_header": "Apache/2.4.54 (Debian)",
+    "x_powered_by": "PHP/7.4.33",
+    "application_fingerprint": "Joomla CMS markers: joomla.jtext, system.paths, Joomla favicon/media paths"
+  },
+  "events": [
+    {
+      "timestamp": "2026-07-10T10:12:02+02:00",
+      "source_tool": "nmap",
+      "event_type": "service_detection",
+      "src_ip": "172.21.0.1",
+      "dest_ip": "172.21.0.3",
+      "dest_port": 80,
+      "protocol": "tcp",
+      "service": "http",
+      "product": "Apache httpd",
+      "version": "2.4.54",
+      "extra_info": "Debian; PHP/7.4.33 header observed"
+    },
+    {
+      "timestamp": "2026-07-10T10:12:07+02:00",
+      "source_tool": "http_enum",
+      "event_type": "web_fingerprint",
+      "src_ip": "172.21.0.1",
+      "dest_ip": "172.21.0.3",
+      "dest_port": 80,
+      "http_method": "GET",
+      "url_path": "/",
+      "status": 200,
+      "user_agent": "curl/8.x authorized-lab-enum",
+      "indicators": [
+        "joomla.jtext",
+        "system.paths",
+        "media/system/images/joomla-favicon.svg",
+        "csrf.token redacted"
+      ],
+      "classification": "application_fingerprint"
+    },
+    {
+      "timestamp": "2026-07-10T10:13:18+02:00",
+      "source_tool": "red_team_validation",
+      "event_type": "vulnerability_validation",
+      "src_ip": "172.21.0.1",
+      "dest_ip": "172.21.0.3",
+      "dest_port": 80,
+      "http_method": "GET",
+      "url_path": "/api/index.php/v1/config/application?public=true",
+      "status": 200,
+      "cve": "CVE-2023-23752",
+      "product": "Joomla!",
+      "observed_keys": [
+        "sitename",
+        "dbtype",
+        "offline",
+        "offline_message"
+      ],
+      "sensitive_fields": [
+        "host",
+        "user",
+        "password",
+        "token"
+      ],
+      "sensitive_values": "redacted",
+      "result": "confirmed",
+      "confidence": "high"
+    },
+    {
+      "timestamp": "2026-07-10T10:13:21+02:00",
+      "source_tool": "waf_simulated",
+      "event_type": "web_alert",
+      "src_ip": "172.21.0.1",
+      "dest_ip": "172.21.0.3",
+      "dest_port": 80,
+      "http_method": "GET",
+      "url_path": "/api/index.php/v1/config/application?public=true",
+      "status": 200,
+      "rule_id": "WEB-JOOMLA-CONFIG-EXPOSURE",
+      "severity": "high",
+      "mapped_tactics": [
+        "TA0007"
+      ],
+      "mapped_techniques": [
+        "T1592",
+        "T1190"
+      ],
+      "message": "Unauthenticated Joomla API configuration endpoint returned application configuration keys."
+    },
+    {
+      "timestamp": "2026-07-10T10:14:10+02:00",
+      "source_tool": "web_content_check",
+      "event_type": "content_inspection",
+      "src_ip": "172.21.0.1",
+      "dest_ip": "172.21.0.3",
+      "dest_port": 80,
+      "http_method": "GET",
+      "url_path": "/index.php",
+      "status": 200,
+      "patterns_checked": [
+        "eval",
+        "base64_decode",
+        "file_get_contents",
+        "include",
+        "require"
+      ],
+      "result": "no_malicious_php_pattern_confirmed"
+    },
+    {
+      "timestamp": "2026-07-10T10:15:00+02:00",
+      "source_tool": "package_inventory",
+      "event_type": "asset_inventory",
+      "dest_ip": "172.21.0.3",
+      "packages": [
+        {
+          "name": "joomla",
+          "version": "4.2.7",
+          "status": "observed_from_lab_image"
+        },
+        {
+          "name": "apache2",
+          "version": "2.4.54",
+          "status": "observed_from_banner"
+        },
+        {
+          "name": "php",
+          "version": "7.4.33",
+          "status": "observed_from_header"
+        }
+      ]
+    }
+  ],
+  "iocs": {
+    "ips": [
+      "172.21.0.3",
+      "172.21.0.1"
+    ],
+    "domains": [],
+    "urls": [
+      "http://172.21.0.3/api/index.php/v1/config/application?public=true"
+    ],
+    "cves": [
+      "CVE-2023-23752"
+    ],
+    "attack_techniques": [
+      "T1592",
+      "T1190"
+    ]
+  },
+  "analyst_notes": [
+    "Use only the supplied logs/evidence and local ingested databases for enrichment.",
+    "Do not run nmap in threat-intel pipeline; this is log-driven analysis.",
+    "Evidence confirms exposure; sensitive configuration values are intentionally redacted."
+  ]
+}

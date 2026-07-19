@@ -16,6 +16,7 @@ def build_run_artifacts(
     status: str,
     evidence: dict[str, Any],
     service_summary: str,
+    evidence_summary: str,
     vulnerability_report: str,
     correlation_report: str,
     prediction_report: str,
@@ -36,6 +37,14 @@ def build_run_artifacts(
         remediation_plan = remediation_plan.rstrip() + "\n\n" + execution_summary
 
     combined_path = run_dir / "threat_intel_output.md"
+    supporting_artifacts = [
+        f"- Evidence JSON: `{evidence_path}`",
+    ]
+    if script_artifacts:
+        supporting_artifacts.append(f"- Generated scripts manifest: `{script_artifacts['manifest_path']}`")
+    if remediation_execution:
+        supporting_artifacts.append(f"- Remediation execution results: `{remediation_execution['results_path']}`")
+
     combined_path.write_text(
         "\n\n".join(
             [
@@ -45,20 +54,14 @@ def build_run_artifacts(
                 f"- Status: {status}",
                 f"- Target: {target}",
                 f"- Evidence: {evidence_label}",
-                "## Service Summary",
-                service_summary,
-                "## Vulnerability Findings",
-                vulnerability_report,
-                "## Correlation",
-                correlation_report,
-                "## Prediction",
-                prediction_report,
-                "## SOC Report",
+                "## Evidence-Only SOC Report",
                 soc_report,
                 "## Remediation Plan",
                 remediation_plan,
                 "## Remediation Execution",
                 execution_summary or "Remediation scripts were not executed for this run.",
+                "## Supporting Artifacts",
+                "\n".join(supporting_artifacts),
             ]
         ).rstrip()
         + "\n",

@@ -1,12 +1,12 @@
-from agents.base_agent import BaseAgentFactory
+from agents.red_team.factory import create_red_team_agent
 from agents.registry import AgentRegistry
-from agents.tool_config import configured_agent_tools
 
 
 @AgentRegistry.register("red_team_windows_attack_agent")
 def create_red_team_windows_attack_agent():
-    return BaseAgentFactory.create(
-        role="Red Team Windows and AD Attack Agent",
+    return create_red_team_agent(
+        agent_key="red_team_windows_attack_agent",
+        agent_role="Red Team Windows and AD Attack Agent",
         goal=(
             "Analyze SMB, NetBIOS, RDP, WinRM, LDAP, Kerberos, and AD-adjacent services for "
             "authorized validation paths."
@@ -16,6 +16,4 @@ def create_red_team_windows_attack_agent():
             "Windows management and file-sharing surfaces without password spraying, credential "
             "theft, persistence, or lateral movement outside the approved target."
         ),
-        tools=configured_agent_tools("red_team_windows_attack_agent"),
-        allow_delegation=False,
     )

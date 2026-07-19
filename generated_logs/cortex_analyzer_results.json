@@ -1,0 +1,66 @@
+{
+  "source_tool": "cortex",
+  "export_type": "cortex_analyzer_fixture",
+  "generated_at": "2026-07-13T14:23:00+02:00",
+  "case_id": "SOC-JOOMLA-20260713-001",
+  "analyzer_reports": [
+    {
+      "analyzer": "Urlscan_Synthetic_1_0",
+      "status": "Success",
+      "observable": {
+        "dataType": "url",
+        "data": "http://172.21.0.3/api/index.php/v1/config/application?public=true"
+      },
+      "summary": {
+        "taxonomies": [
+          {
+            "namespace": "Urlscan",
+            "predicate": "Endpoint",
+            "value": "Sensitive configuration API",
+            "level": "suspicious"
+          }
+        ]
+      },
+      "full": {
+        "http_status": 200,
+        "detected_application": "Joomla",
+        "matched_patterns": [
+          "api/index.php/v1/config/application",
+          "public=true",
+          "application configuration keys"
+        ],
+        "sensitive_values": "redacted"
+      }
+    },
+    {
+      "analyzer": "CVE_Search_Synthetic_1_0",
+      "status": "Success",
+      "observable": {
+        "dataType": "other",
+        "data": "CVE-2023-23752"
+      },
+      "summary": {
+        "taxonomies": [
+          {
+            "namespace": "CVE",
+            "predicate": "Severity",
+            "value": "High",
+            "level": "malicious"
+          }
+        ]
+      },
+      "full": {
+        "cve": "CVE-2023-23752",
+        "product": "Joomla",
+        "affected_versions": "4.0.0 through 4.2.7",
+        "fixed_versions": [
+          "4.2.8"
+        ],
+        "attack_techniques": [
+          "T1190",
+          "T1592"
+        ]
+      }
+    }
+  ]
+}

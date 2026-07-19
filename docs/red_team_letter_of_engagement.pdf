@@ -1,0 +1,224 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 3065 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+50 748 Td
+(Red Team Letter of Engagement and Rules of Engagement) Tj
+T*
+() Tj
+T*
+(This letter authorizes the red-team agent to perform a controlled security assessment) Tj
+T*
+(only against the target, ports, time window, and environment supplied for the current run.) Tj
+T*
+(The system owner remains responsible for confirming that those assets are owned by the) Tj
+T*
+(client or that written permission to test them has been obtained.) Tj
+T*
+() Tj
+T*
+(The agent MAY:) Tj
+T*
+(  - Perform bounded reconnaissance and service/version identification on the supplied target.) Tj
+T*
+(  - Correlate observed evidence with vulnerability information.) Tj
+T*
+(  - Propose low-impact exploitability checks and create small, reviewable validation scripts.) Tj
+T*
+(  - Execute an active validation only when the caller explicitly enables execution.) Tj
+T*
+(  - Store commands, observations, and evidence in the designated run artifacts.) Tj
+T*
+() Tj
+T*
+(The agent MUST:) Tj
+T*
+(  - Stay within the exact target and ports supplied for the current run.) Tj
+T*
+(  - Prefer passive or low-impact checks and minimize requests and data access.) Tj
+T*
+(  - Default generated tools to dry-run/planning mode and require an explicit execution flag.) Tj
+T*
+(  - Report findings as unconfirmed until distinctive evidence validates them.) Tj
+T*
+(  - Stop and refuse a request when authorization or scope is absent, ambiguous, or) Tj
+T*
+(    conflicting.) Tj
+T*
+() Tj
+T*
+(The agent MUST NOT:) Tj
+T*
+(  - Test third-party or out-of-scope systems, pivot to other hosts, or expand the scope) Tj
+T*
+(    itself.) Tj
+T*
+(  - Perform denial-of-service, flooding, stress, resource-exhaustion, or crash testing.) Tj
+T*
+(  - Destroy or alter data, deploy persistence, evade monitoring, or conceal its activity.) Tj
+T*
+(  - Steal credentials or secrets, perform phishing/social engineering, or use discovered) Tj
+T*
+(  credentials beyond the approved validation objective.) Tj
+T*
+(  - Exfiltrate sensitive data; collect only the minimum redacted evidence needed.) Tj
+T*
+() Tj
+T*
+(Any conflict is resolved in favor of the narrower and safer interpretation. Human operators) Tj
+T*
+(may stop the engagement at any time. Findings and artifacts must be handled as confidential.) Tj
+T*
+() Tj
+T*
+(Approved lab-specific profile: Vulhub Tomcat CVE-2017-12615) Tj
+T*
+() Tj
+T*
+(When the authorized environment is the local Vulhub Tomcat CVE-2017-12615 training lab,) Tj
+T*
+(the following additional constraints apply and override any broader interpretation:) Tj
+T*
+() Tj
+T*
+(Lab source:) Tj
+T*
+(  - Vulhub environment: labs/vulhub/tomcat/CVE-2017-12615) Tj
+T*
+(  - Lab README: labs/vulhub/tomcat/CVE-2017-12615/README.md) Tj
+T*
+(  - Local exposure used for testing: 127.0.0.1:18080 mapped to container port 8080) Tj
+T*
+(  - Documented lab software/version: Apache Tomcat 8.5.19) Tj
+T*
+() Tj
+T*
+(Authorized lab purpose:) Tj
+T*
+(  - Assess whether the exposed Tomcat service shows bounded evidence of writable PUT-method) Tj
+T*
+(  behavior consistent with the lab notes for CVE-2017-12615.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2306 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+50 748 Td
+() Tj
+T*
+(Authorized lab scope:) Tj
+T*
+(  - Target host: 127.0.0.1) Tj
+T*
+(  - Target port: 18080/tcp only) Tj
+T*
+(  - No additional localhost ports, Docker networks, interfaces, or hosts are in scope) Tj
+T*
+() Tj
+T*
+(The agent MAY for this lab:) Tj
+T*
+(  - Perform bounded reconnaissance against 127.0.0.1:18080.) Tj
+T*
+(  - Request low-impact HTTP evidence such as headers, status codes, OPTIONS/Allow behavior,) Tj
+T*
+(  default page content, and version indicators.) Tj
+T*
+(  - Correlate observed service evidence with the Vulhub lab notes for CVE-2017-12615.) Tj
+T*
+(  - If execution is explicitly enabled, perform at most one harmless PUT-based validation) Tj
+T*
+(  using a non-executable marker file and record the result as evidence.) Tj
+T*
+() Tj
+T*
+(The agent MUST for this lab:) Tj
+T*
+(  - Stay strictly on 127.0.0.1:18080.) Tj
+T*
+(  - Cite this engagement letter and the Vulhub README context when narrowing or refusing work.) Tj
+T*
+(  - Prefer passive verification first, then low-impact active validation only if explicitly) Tj
+T*
+(    enabled.) Tj
+T*
+(  - Keep artifacts limited to observations and proof material needed to show whether bounded) Tj
+T*
+(  writable PUT behavior appears present.) Tj
+T*
+(  - Treat exploitability as unconfirmed unless the exact uploaded marker is successfully) Tj
+T*
+(  retrieved from the target.) Tj
+T*
+() Tj
+T*
+(The agent MUST NOT for this lab:) Tj
+T*
+(  - Upload JSP, webshell, or other executable server-side content.) Tj
+T*
+(  - Execute arbitrary commands, establish persistence, or conceal activity.) Tj
+T*
+(  - Leave behind proof artifacts after validation when cleanup is supported.) Tj
+T*
+(  - Pivot to containers, Docker networks, loopback aliases, or adjacent services.) Tj
+T*
+(  - Exfiltrate data or access credentials not required for this validation objective.) Tj
+T*
+() Tj
+T*
+(Engagement fields \(complete before operational use\):) Tj
+T*
+(Client / system owner: ____________________) Tj
+T*
+(Assessment provider: ______________________) Tj
+T*
+(Authorized targets and ports: ______________) Tj
+T*
+(Start and end time \(with timezone\): __________) Tj
+T*
+(Emergency contact / stop authority: __________) Tj
+T*
+(Client approval signature and date: __________) Tj
+T*
+(Provider approval signature and date: ________) Tj
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000197 00000 n 
+0000000323 00000 n 
+0000003440 00000 n 
+0000003566 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+5924
+%%EOF

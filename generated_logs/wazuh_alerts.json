@@ -1,0 +1,162 @@
+{
+  "source_tool": "wazuh",
+  "export_type": "wazuh_alerts_fixture",
+  "generated_at": "2026-07-13T14:20:00+02:00",
+  "case_id": "SOC-JOOMLA-20260713-001",
+  "target": "172.21.0.3",
+  "description": "Synthetic Wazuh alert export for a lab Joomla CVE-2023-23752 exposure. All external indicators use documentation ranges.",
+  "alerts": [
+    {
+      "timestamp": "2026-07-13T14:03:11.882+0200",
+      "rule": {
+        "id": "31151",
+        "level": 12,
+        "description": "Web application attack: suspicious Joomla API configuration endpoint access",
+        "groups": [
+          "web",
+          "attack",
+          "joomla"
+        ],
+        "mitre": {
+          "id": [
+            "T1190",
+            "T1592"
+          ],
+          "tactic": [
+            "Initial Access",
+            "Reconnaissance"
+          ],
+          "technique": [
+            "Exploit Public-Facing Application",
+            "Gather Victim Host Information"
+          ]
+        }
+      },
+      "agent": {
+        "id": "007",
+        "name": "lab-joomla-web01",
+        "ip": "172.21.0.3"
+      },
+      "manager": {
+        "name": "wazuh-manager-lab"
+      },
+      "decoder": {
+        "name": "apache-accesslog"
+      },
+      "location": "/var/log/apache2/access.log",
+      "data": {
+        "srcip": "192.0.2.45",
+        "dstip": "172.21.0.3",
+        "srcport": "51842",
+        "dstport": "80",
+        "protocol": "tcp",
+        "http_method": "GET",
+        "url": "/api/index.php/v1/config/application?public=true",
+        "status": "200",
+        "user_agent": "Mozilla/5.0 synthetic-lab-probe",
+        "referer": "-",
+        "cve": "CVE-2023-23752",
+        "application": "Joomla",
+        "confidence": "high"
+      },
+      "full_log": "192.0.2.45 - - [13/Jul/2026:14:03:11 +0200] \"GET /api/index.php/v1/config/application?public=true HTTP/1.1\" 200 2681 \"-\" \"Mozilla/5.0 synthetic-lab-probe\""
+    },
+    {
+      "timestamp": "2026-07-13T14:04:02.214+0200",
+      "rule": {
+        "id": "23505",
+        "level": 10,
+        "description": "Vulnerability detector: installed Joomla version is affected by CVE-2023-23752",
+        "groups": [
+          "vulnerability-detector",
+          "cve",
+          "joomla"
+        ],
+        "mitre": {
+          "id": [
+            "T1190"
+          ],
+          "tactic": [
+            "Initial Access"
+          ],
+          "technique": [
+            "Exploit Public-Facing Application"
+          ]
+        }
+      },
+      "agent": {
+        "id": "007",
+        "name": "lab-joomla-web01",
+        "ip": "172.21.0.3"
+      },
+      "manager": {
+        "name": "wazuh-manager-lab"
+      },
+      "decoder": {
+        "name": "json"
+      },
+      "location": "vulnerability-detector",
+      "data": {
+        "package": {
+          "name": "joomla",
+          "version": "4.2.7",
+          "architecture": "webapp"
+        },
+        "vulnerability": {
+          "cve": "CVE-2023-23752",
+          "severity": "High",
+          "cvss3_score": "7.5",
+          "status": "Active",
+          "title": "Joomla improper access control in webservice endpoints",
+          "reference": "local-ingested-cti"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-07-13T14:06:49.039+0200",
+      "rule": {
+        "id": "5710",
+        "level": 7,
+        "description": "Multiple authentication failures from same source",
+        "groups": [
+          "authentication_failed",
+          "ssh"
+        ],
+        "mitre": {
+          "id": [
+            "T1110"
+          ],
+          "tactic": [
+            "Credential Access"
+          ],
+          "technique": [
+            "Brute Force"
+          ]
+        }
+      },
+      "agent": {
+        "id": "011",
+        "name": "lab-admin-host",
+        "ip": "172.21.0.10"
+      },
+      "manager": {
+        "name": "wazuh-manager-lab"
+      },
+      "decoder": {
+        "name": "sshd"
+      },
+      "location": "/var/log/auth.log",
+      "data": {
+        "srcip": "192.0.2.45",
+        "dstip": "172.21.0.10",
+        "srcport": "50312",
+        "dstport": "22",
+        "user": "admin",
+        "action": "failed-password",
+        "attempts": 8,
+        "confidence": "medium"
+      },
+      "full_log": "sshd[2198]: Failed password for admin from 192.0.2.45 port 50312 ssh2"
+    }
+  ]
+}

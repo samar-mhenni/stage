@@ -1,0 +1,60 @@
+[
+  {
+    "name": "Atlassian Confluence",
+    "terms": ["atlassian", "confluence"],
+    "markers": [
+      "confluence.web.resources",
+      "com.atlassian.confluence",
+      "atlassian confluence",
+      "bootstrap/selectsetupstep.action",
+      "selectsetupstep.action"
+    ],
+    "version_patterns": [
+      "confluence[^\\\"'\\s>]*[:/\\-](\\d+\\.\\d+\\.\\d+)",
+      "/(\\d+\\.\\d+\\.\\d+)/_/download/batch/com\\.atlassian\\.confluence"
+    ],
+    "attack_notes": "Use Confluence-specific database records before planning validation. Do not infer CVEs from setup-page reachability alone."
+  },
+  {
+    "name": "Joomla",
+    "terms": ["joomla"],
+    "markers": ["joomla.jtext", "media/system/images/joomla", "content=\"joomla!", "/api/index.php/v1/"],
+    "version_patterns": ["joomla[!/\\s-]*(\\d+\\.\\d+\\.\\d+)"],
+    "attack_notes": "Use Joomla-specific database and CVE evidence before validation. Prefer version and API exposure evidence over generic HTTP 200 responses."
+  },
+  {
+    "name": "Jenkins",
+    "terms": ["jenkins"],
+    "markers": ["x-jenkins", "jenkins", "jenkins-agent-protocols", "/login?from="],
+    "version_patterns": ["x-jenkins:\\s*([0-9][0-9.]+)"],
+    "attack_notes": "Use Jenkins headers and login surface evidence to query the database. Avoid credential attacks unless explicitly authorized elsewhere."
+  },
+  {
+    "name": "Apache Solr",
+    "terms": ["apache", "solr"],
+    "markers": ["solr admin", "apache solr", "/solr/", "solr-dashboard"],
+    "version_patterns": ["solr[ /\\-]*([0-9][0-9.]+)"],
+    "attack_notes": "Use Solr admin and core/API exposure as evidence for database lookup. Require product-specific positive signals for validation."
+  },
+  {
+    "name": "Openfire",
+    "terms": ["openfire"],
+    "markers": ["openfire admin console", "/setup/setup-", "jive"],
+    "version_patterns": ["openfire[ /\\-]*([0-9][0-9.]+)"],
+    "attack_notes": "Use Openfire admin/setup evidence to query database records. Do not confirm exploitability from setup page reachability alone."
+  },
+  {
+    "name": "Apache Struts",
+    "terms": ["apache", "struts"],
+    "markers": ["struts", "struts2"],
+    "version_patterns": ["struts[ /\\-]*([0-9][0-9.]+)"],
+    "attack_notes": "Use Struts markers to prioritize database-backed OGNL/RCE guidance. Require a harmless unique-marker signal for active validation."
+  },
+  {
+    "name": "Spring",
+    "terms": ["spring"],
+    "markers": ["spring boot", "whitelabel error page", "springframework", "/actuator"],
+    "version_patterns": ["spring[ /\\-]*([0-9][0-9.]+)"],
+    "attack_notes": "Use Spring and actuator evidence to query database records. Avoid naming CVEs unless database records and observed fingerprint align."
+  }
+]

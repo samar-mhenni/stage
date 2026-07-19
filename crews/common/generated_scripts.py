@@ -33,12 +33,47 @@ def _script_syntax_error(body: str, interpreter: str = "bash") -> str:
     return (completed.stderr or completed.stdout or f"{shell} -n failed").strip()
 
 
+def generated_script_quality_error(body: str, interpreter: str = "bash") -> str:
+    syntax_error = _script_syntax_error(body, interpreter)
+    if syntax_error:
+        return f"script_syntax_error: {syntax_error}"
+    interpreter_name = str(interpreter or "").lower()
+    shell_scan_body = re.sub(r"'[^'\n]*'", "''", body)
+    if ("bash" in interpreter_name or "sh" in interpreter_name) and re.search(r"(?<!\\)\$\{[^A-Za-z_#?!*@0-9-]", shell_scan_body):
+        return "unsafe_literal_dollar_brace: literal ${...} payload is not shell-escaped and can fail at runtime"
+    body_lower = body.lower()
+    if "confirmed_exploits.txt" in body_lower and re.search(
+        r"(confirmed_exploits\.txt[^\n]*(no marker|not found|not confirmed|failed|absent|missing|did not|does not)|"
+        r"(no marker|not found|not confirmed|failed|absent|missing|did not|does not)[^\n]*confirmed_exploits\.txt)",
+        body_lower,
+    ):
+        return "negative_confirmation_write: non-confirmation text must be written to observations.txt, not confirmed_exploits.txt"
+    if ".raw" in body_lower and "$(date +%s)" in body:
+        dynamic_raw_refs = [
+            line
+            for line in body.splitlines()
+            if ".raw" in line.lower() and "$(date +%s)" in line
+        ]
+        has_stable_raw_var = re.search(r"(?m)^\s*(RAW|RAW_PATH|BODY|BODY_PATH)=", body) is not None
+        if len(dynamic_raw_refs) > 1 and not has_stable_raw_var:
+            return "unstable_response_artifact_path: assign RAW once and reuse it for curl output and marker checks"
+    return ""
+
+
+def _unescape_shell_dollars(body: str) -> str:
+    body = re.sub(r"\\\$(?=\()", "$", body)
+    body = re.sub(r"\\\$(?=[A-Za-z_][A-Za-z0-9_]*)", "$", body)
+    body = re.sub(r"\\\$\{(?=[A-Za-z_][A-Za-z0-9_]*[}:])", "${", body)
+    body = re.sub(r"\\\$([#?*!@0-9-])", r"$\1", body)
+    return body
+
+
 def normalize_red_team_script_body(body: str) -> str:
     body = str(body or "").strip()
     first_line = body.splitlines()[0] if body.splitlines() else body
     if "\\n" in body and ("\n" not in body or "\\n" in first_line):
         body = body.replace("\\r\\n", "\n").replace("\\n", "\n")
-    body = body.replace("\\$", "$")
+    body = _unescape_shell_dollars(body)
     body = re.sub(r"'([^'\n]*\$(?:TARGET|USER|PASS)[^'\n]*)'", r'"\1"', body)
     body = body.replace("grep -q 'User created'", "grep -Eq 'User created|Exception|NullPointerException'")
     body = body.replace('grep -q "User created"', 'grep -Eq "User created|Exception|NullPointerException"')
@@ -53,6 +88,11 @@ def normalize_remediation_script_body(body: str) -> str:
         body = body.replace("\\r\\n", "\n").replace("\\n", "\n")
     body = body.replace('[ "$1" = "--apply" ]', '[ "${1:-}" = "--apply" ]')
     body = body.replace("[ '$1' = '--apply' ]", '[ "${1:-}" = "--apply" ]')
+    body = re.sub(
+        r'\[\s*"\$@"\s*==\s*"--apply"\s*\]',
+        'printf "%s\\n" "$@" | grep -qx -- "--apply"',
+        body,
+    )
     body = body.replace('grep -q "disable = no"', 'grep -Eq "disable[[:space:]]*=[[:space:]]*no"')
     body = body.replace("grep -q 'disable = no'", "grep -Eq 'disable[[:space:]]*=[[:space:]]*no'")
     body = body.replace(
@@ -107,14 +147,14 @@ def write_script_manifest(
         body = normalizer(str(script.get("body") or ""))
         if not body:
             continue
-        syntax_error = _script_syntax_error(body, script.get("interpreter", "bash"))
-        if syntax_error:
+        quality_error = generated_script_quality_error(body, script.get("interpreter", "bash"))
+        if quality_error:
             skipped_scripts.append(
                 {
                     "filename": filename,
                     "name": script.get("name", filename),
-                    "reason": "script_syntax_error",
-                    "error": syntax_error[:1000],
+                    "reason": "script_quality_error",
+                    "error": quality_error[:1000],
                 }
             )
             continue

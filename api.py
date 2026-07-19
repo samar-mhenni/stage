@@ -122,8 +122,8 @@ def _compact_run_response(result: dict[str, Any]) -> dict[str, Any]:
         "open_port_count": len(open_ports),
         "open_ports": open_ports,
         "service_summary": result.get("service_summary"),
-        "correlation_report": result.get("correlation_report"),
-        "prediction_report": result.get("prediction_report"),
+        "evidence_summary": result.get("evidence_summary"),
+        "soc_report": result.get("soc_report"),
         "db_path": result.get("db_path"),
         "artifacts": result.get("artifacts"),
         "generated_scripts": result.get("generated_scripts"),
@@ -139,6 +139,17 @@ def _connect(db_path: str = str(DEFAULT_DB_PATH)) -> sqlite3.Connection:
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Database not found: {db_path}")
     return sqlite3.connect(path)
+
+
+def _pipeline_error(error: str, exc: Exception) -> HTTPException:
+    return HTTPException(
+        status_code=500,
+        detail={
+            "error": error,
+            "message": str(exc),
+            "type": exc.__class__.__name__,
+        },
+    )
 
 
 @app.get("/health")
@@ -169,14 +180,7 @@ def run_threat_intel(request: ThreatIntelRunRequest) -> dict[str, Any]:
             remediation_timeout=request.remediation_timeout,
         )
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "threat_intel_run_failed",
-                "message": str(exc),
-                "type": exc.__class__.__name__,
-            },
-        ) from exc
+        raise _pipeline_error("threat_intel_run_failed", exc) from exc
 
     response = result if request.include_full_output else _compact_run_response(result)
     return jsonable_encoder(response)
@@ -197,14 +201,7 @@ def run_red_team(request: RedTeamRunRequest) -> dict[str, Any]:
             environment_context=request.environment_context,
         )
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "red_team_run_failed",
-                "message": str(exc),
-                "type": exc.__class__.__name__,
-            },
-        ) from exc
+        raise _pipeline_error("red_team_run_failed", exc) from exc
     return jsonable_encoder(result)
 
 
@@ -233,14 +230,7 @@ def run_red_team_recon(request: RedTeamReconRunRequest) -> dict[str, Any]:
             }
         )
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "red_team_recon_run_failed",
-                "message": str(exc),
-                "type": exc.__class__.__name__,
-            },
-        ) from exc
+        raise _pipeline_error("red_team_recon_run_failed", exc) from exc
 
 
 @app.post("/api/red-team/agents/{agent_name}/run")
@@ -270,14 +260,7 @@ def run_red_team_agent(agent_name: str, request: RedTeamAgentRunRequest) -> dict
         )
         return jsonable_encoder(result)
     except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "red_team_agent_run_failed",
-                "message": str(exc),
-                "type": exc.__class__.__name__,
-            },
-        ) from exc
+        raise _pipeline_error("red_team_agent_run_failed", exc) from exc
 
 
 @app.get("/api/threat-intel/runs")

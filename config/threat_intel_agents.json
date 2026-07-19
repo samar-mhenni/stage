@@ -17,11 +17,12 @@
     "pipeline_agents": [
       "red_team_recon_agent",
       "red_team_exploit_planner_agent",
-      "red_team_tool_generation_agent",
-      "red_team_reporting_agent"
+      "red_team_tool_generation_agent"
     ],
     "agent_modules": {
-      "red_team_recon_agent": "agents.red_team.recon"
+      "red_team_recon_agent": "agents.red_team.recon",
+      "red_team_exploit_planner_agent": "agents.red_team.core",
+      "red_team_tool_generation_agent": "agents.red_team.tool_generation"
     },
     "generated_tools": {
       "active_args": ["--execute"]
@@ -69,9 +70,6 @@
     "prediction_agent": {
       "tools": ["knowledge_base_tool"]
     },
-    "reporting_agent": {
-      "tools": ["knowledge_base_tool"]
-    },
     "response_agent": {
       "tools": ["knowledge_base_tool"]
     },
@@ -90,9 +88,6 @@
     "red_team_exploit_planner_agent": {
       "tools": ["knowledge_base_tool"]
     },
-    "red_team_reporting_agent": {
-      "tools": ["knowledge_base_tool"]
-    },
     "red_team_web_attack_agent": {
       "tools": ["knowledge_base_tool"]
     },
@@ -103,6 +98,15 @@
       "tools": ["knowledge_base_tool"]
     },
     "red_team_blockchain_attack_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "red_team_search_tool_generator_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "threat_intel_search_tool_generator_agent": {
+      "tools": ["knowledge_base_tool"]
+    },
+    "hash_cracking_tool_generator_agent": {
       "tools": ["knowledge_base_tool"]
     }
   }

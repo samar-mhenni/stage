@@ -1,19 +1,19 @@
-"""
-Custom CrewAI tools that interface with the existing ChromaDB vector databases.
-This allows agents to autonomously search MITRE ATT&CK knowledge without altering the underlying RAG system.
-"""
-from crewai.tools import BaseTool
+"""Reusable local tool functions for search and authorized hash cracking."""
 import chromadb
 from sentence_transformers import SentenceTransformer
 import logging
 import re
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 
 # Suppress sentence_transformers logging if needed
 logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 
 _embedding_model = None
 _db_client = None
-MAX_CONTEXT_CHARS = 700
+MAX_CONTEXT_CHARS = 1800
 
 
 def _get_embedding_model():
@@ -168,26 +168,113 @@ def threat_intel_database_search(query: str) -> str:
     )
 
 
-class RedTeamSearchTool(BaseTool):
-    name: str = "Red Team Database Search"
-    description: str = (
-        "Search the Red Team, Exploit, Attack, and Actor databases for operational red team knowledge, "
-        "adversary simulation procedures, exploits, vulnerabilities, CVEs, and MITRE ATT&CK techniques. "
-        "Input should be a specific search query like 'Credential Dumping', 'Ryuk ransomware', or 'CVE-2021-44228'."
-    )
+HASH_FORMAT_ALIASES = {
+    "md5": "raw-md5",
+    "raw-md5": "raw-md5",
+    "sha1": "raw-sha1",
+    "raw-sha1": "raw-sha1",
+    "sha256": "raw-sha256",
+    "raw-sha256": "raw-sha256",
+    "sha512": "raw-sha512",
+    "raw-sha512": "raw-sha512",
+    "ntlm": "nt",
+    "nt": "nt",
+    "bcrypt": "bcrypt",
+    "md5crypt": "md5crypt",
+}
 
-    def _run(self, query: str) -> str:
-        return red_team_database_search(query)
+
+def john_the_ripper_hash_crack(query: str) -> str:
+    """Attempt to crack authorized hashes with local John the Ripper."""
+    john = shutil.which("john")
+    if not john:
+        return "John the Ripper is not installed or is not on PATH."
+
+    hashes, options = _parse_hash_crack_query(query)
+    if not hashes:
+        return "No hashes were provided."
+
+    hash_format = _normalize_hash_format(options.get("format", "raw-md5"))
+    if not hash_format:
+        return "Unsupported hash format. Use one of: " + ", ".join(sorted(set(HASH_FORMAT_ALIASES.values())))
+
+    timeout = _parse_hash_crack_timeout(options.get("timeout", "300"))
+    wordlist = options.get("wordlist")
+    if wordlist and not Path(wordlist).is_file():
+        return f"Wordlist not found: {wordlist}"
+
+    with tempfile.TemporaryDirectory(prefix="john_hash_crack_") as tmpdir:
+        tmp = Path(tmpdir)
+        hash_file = tmp / "hashes.txt"
+        pot_file = tmp / "john.pot"
+        labeled_hashes = {f"hash{idx}": hash_value for idx, hash_value in enumerate(hashes, start=1)}
+        hash_file.write_text(
+            "\n".join(f"{label}:{hash_value}" for label, hash_value in labeled_hashes.items()) + "\n",
+            encoding="utf-8",
+        )
+
+        cmd = [john, f"--format={hash_format}", f"--pot={pot_file}"]
+        if wordlist:
+            cmd.append(f"--wordlist={wordlist}")
+        cmd.append(str(hash_file))
+
+        try:
+            run = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout, check=False)
+        except subprocess.TimeoutExpired:
+            return f"John timed out after {timeout} seconds before completing."
+
+        show = subprocess.run(
+            [john, "--show", f"--format={hash_format}", f"--pot={pot_file}", str(hash_file)],
+            text=True,
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+
+    shown = _format_cracked_hashes(show.stdout, labeled_hashes)
+    if shown:
+        return shown
+
+    details = (run.stderr or run.stdout or "").strip()
+    if details:
+        return f"No hashes cracked.\n\nJohn output:\n{details[-1200:]}"
+    return "No hashes cracked."
 
 
-class ThreatIntelSearchTool(BaseTool):
-    name: str = "threat_intel_database_search"
-    description: str = (
-        "Search the Detection, Attack, and Actor databases for defensive CTI analysis, "
-        "detection guidance, mitigations, attribution scoring, and SIEM rules. "
-        "Input should be a specific search query like 'MFA fatigue detection' or 'APT29 mitigations'. "
-        "Returns source collection, object type, name, match score, and matching source text."
-    )
+def _parse_hash_crack_query(query: str) -> tuple[list[str], dict[str, str]]:
+    hashes: list[str] = []
+    options: dict[str, str] = {}
+    for raw_line in str(query).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        key, sep, value = line.partition("=")
+        if sep and key.strip().lower() in {"format", "wordlist", "timeout"}:
+            options[key.strip().lower()] = value.strip()
+        else:
+            hashes.append(line)
+    return hashes, options
 
-    def _run(self, query: str) -> str:
-        return threat_intel_database_search(query)
+
+def _normalize_hash_format(value: str) -> str:
+    return HASH_FORMAT_ALIASES.get(value.strip().lower(), "")
+
+
+def _parse_hash_crack_timeout(value: str) -> int:
+    try:
+        return max(1, min(int(value), 3600))
+    except ValueError:
+        return 300
+
+
+def _format_cracked_hashes(john_show_output: str, labeled_hashes: dict[str, str]) -> str:
+    cracked: list[str] = []
+    for raw_line in john_show_output.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", "0 password", "1 password")):
+            continue
+        label, sep, plaintext = line.partition(":")
+        if not sep or label not in labeled_hashes:
+            continue
+        cracked.append(f"{labeled_hashes[label]}: {plaintext}")
+    return "\n".join(cracked)

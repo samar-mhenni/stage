@@ -1,21 +1,25 @@
 from crewai import Task
 
-from tasks.common import CONCISE_LOCAL_FIRST
+from tasks.common import CONCISE_LOCAL_FIRST, none_if_blank, section
 from tasks.registry import TaskRegistry
+
+
+def _task(agent, description: str, expected_output: str) -> Task:
+    return Task(description=description, expected_output=expected_output, agent=agent)
 
 
 @TaskRegistry.register("red_team_recon_task")
 def create_red_team_recon_task(agent, target: str, ports: str, timeout: int) -> Task:
-    return Task(
-        description=(
+    return _task(
+        agent,
+        (
             "Run authorized red-team reconnaissance against this target.\n\n"
-            f"Target: {target}\n"
-            f"Ports: {ports}\n"
-            f"Timeout seconds: {timeout}\n\n"
+            f"{section('Target', target)}\n"
+            f"{section('Ports', ports)}\n"
+            f"{section('Timeout seconds', timeout)}\n\n"
             "Return structured Nmap JSON only. Keep enumeration bounded to the supplied target."
         ),
-        expected_output="Valid Nmap JSON with host, port, service, product, and version evidence.",
-        agent=agent,
+        "Valid Nmap JSON with host, port, service, product, and version evidence.",
     )
 
 
@@ -27,18 +31,19 @@ def create_red_team_recon_tool_generation_task(
     timeout: int,
     local_context: str = "",
 ) -> Task:
-    return Task(
-        description=(
+    return _task(
+        agent,
+        (
             f"{CONCISE_LOCAL_FIRST}\n\n"
             "Generate fresh reconnaissance tooling for this authorized run. The recon agent must always "
             "include a bounded Nmap command manifest, and may include additional safe enumeration helper scripts "
             "when useful for the detected surface. The runner writes and executes only the Nmap script by default; "
             "the pipeline then adds safe post-recon enumeration for observed services. Extra helper scripts are generated "
             "as reviewable artifacts when they add clear evidence value.\n\n"
-            f"Target: {target}\n"
-            f"Ports: {ports}\n"
-            f"Timeout seconds: {timeout}\n\n"
-            f"Current live context:\n{local_context or 'None.'}\n\n"
+            f"{section('Target', target)}\n"
+            f"{section('Ports', ports)}\n"
+            f"{section('Timeout seconds', timeout)}\n\n"
+            f"{section('Current live context', none_if_blank(local_context))}\n\n"
             "Return only one minified JSON object with no markdown. Keep it compact. "
             "Do not wrap JSON in markdown.\n\n"
             "Rules: the primary command must be nmap; include service/version detection and open-port filtering; bounded to supplied target and ports; "
@@ -66,8 +71,7 @@ def create_red_team_recon_tool_generation_task(
             "  ]\n"
             "}"
         ),
-        expected_output="JSON manifest describing the fresh bounded Nmap recon command and optional enumeration helpers.",
-        agent=agent,
+        "JSON manifest describing the fresh bounded Nmap recon command and optional enumeration helpers.",
     )
 
 
@@ -80,15 +84,16 @@ def create_red_team_exploit_planning_task(
     local_context: str = "",
     database_context: str = "",
 ) -> Task:
-    return Task(
-        description=(
+    return _task(
+        agent,
+        (
             f"{CONCISE_LOCAL_FIRST}\n\n"
             "Create a controlled red-team exploitability plan for an authorized target.\n\n"
-            f"Target: {target}\n\n"
-            f"Nmap scan evidence:\n{scan_context}\n\n"
-            f"Vulnerability evidence:\n{vulnerability_context}\n\n"
-            f"Ingested database exploit context:\n{database_context or 'No database exploit context provided.'}\n\n"
-            f"Current live context:\n{local_context or 'None.'}\n\n"
+            f"{section('Target', target)}\n\n"
+            f"{section('Nmap scan evidence', scan_context)}\n\n"
+            f"{section('Vulnerability evidence', vulnerability_context)}\n\n"
+            f"{section('Ingested database exploit context', database_context or 'No database exploit context provided.')}\n\n"
+            f"{section('Current live context', none_if_blank(local_context))}\n\n"
             "First use the ingested database exploit context. If it contains relevant candidates, base the plan on "
             "those records and cite the source/name. Only if the database context explicitly says no strong candidates "
             "were found may you infer conservative candidates from the fresh scan and live fingerprint only. In that fallback mode, "
@@ -97,8 +102,7 @@ def create_red_team_exploit_planning_task(
             "Return at most 5 validation candidates. Each: service, reason, safe validation idea, prerequisite. "
             "No persistence, credential theft, destructive actions, or out-of-scope instructions."
         ),
-        expected_output="At most 5 concise red-team validation candidates with safety notes.",
-        agent=agent,
+        "At most 5 concise red-team validation candidates with safety notes.",
     )
 
 
@@ -127,6 +131,23 @@ def create_red_team_tool_generation_task(agent, target: str, scan_context: str, 
             "-w \"%{http_code}\" \"$URL\"), then parse the raw body file. Use single-quoted grep patterns for JSON keys "
             "or a short Python JSON parser to avoid shell quote errors. Never print passwords, tokens, database users, "
             "database hosts, or secrets.\n\n"
+            "For RCE, command-injection, expression-injection, OGNL, template-injection, or deserialization CVEs, "
+            "do not confirm from product version, setup-page reachability, redirect status, or HTTP 200 alone. "
+            "Use active validation only when --execute is present, and make it a harmless unique-marker check: send "
+            "one bounded product-specific request that should return a unique marker in the HTTP response, a response "
+            "header, or a distinctive product-specific error if and only if the injection path is reached. The marker "
+            "must be generated inside the script, contain no shell metacharacters, and avoid persistence or file writes. "
+            "When saving an HTTP response, assign the path once, for example RAW=\"$OUT_DIR/response.raw\" or "
+            "RUN_ID=$(date +%s); RAW=\"$OUT_DIR/${RUN_ID}.raw\", then use the same RAW variable for curl output, "
+            "grep, parsing, and observations. Never call date/hostname separately for the curl output path and the "
+            "later grep/parsing path. "
+            "If the request URL needs a literal ${...} sequence, single-quote or percent-encode it so Bash does not "
+            "treat it as parameter expansion. "
+            "Always write observations.txt with URL, HTTP status, marker, and why it was confirmed or not confirmed. "
+            "Write confirmed_exploits.txt only for a positive signal; never write negative evidence such as not found, "
+            "not confirmed, missing marker, or failed validation there. The marker must be included in the actual "
+            "validation request URL, header, or body, not only generated and checked later. "
+            "Do not rewrite observed paths by dropping path segments; preserve redirect paths and product context from recon.\n\n"
             "Use this shape:\n"
             "{\n"
             "  \"agent\": \"red_team_tool_generation_agent\",\n"
@@ -167,29 +188,5 @@ def create_red_team_tool_generation_task(agent, target: str, scan_context: str, 
             "destructive actions, uncontrolled persistence, or targeting anything outside the authorized target."
         ),
         expected_output="JSON manifest describing fresh LLM-generated red-team validation scripts.",
-        agent=agent,
-    )
-
-
-@TaskRegistry.register("red_team_reporting_task")
-def create_red_team_reporting_task(
-    agent,
-    target: str,
-    scan_context: str,
-    exploit_plan: str,
-    execution_context: str,
-) -> Task:
-    return Task(
-        description=(
-            f"{CONCISE_LOCAL_FIRST}\n\n"
-            "Write a red-team validation report for the authorized target.\n\n"
-            f"Target: {target}\n\n"
-            f"Nmap scan evidence:\n{scan_context}\n\n"
-            f"Exploitability plan:\n{exploit_plan}\n\n"
-            f"Generated-tool execution evidence:\n{execution_context}\n\n"
-            "Return under 350 words. Separate confirmed observations from likely exploitability and skipped checks. "
-            "Include only essential tools used and next validation steps."
-        ),
-        expected_output="A concise red-team validation report under 350 words.",
         agent=agent,
     )

@@ -3,17 +3,18 @@ import os
 import re
 import shlex
 import shutil
-import ssl
 import subprocess
 import xml.etree.ElementTree as ET
 from typing import Any
-from urllib.error import URLError
-from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+from urllib.parse import urljoin
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from pathlib import Path
 
 from agents.execution import run_agent_task
 from agents.registry import AgentRegistry
 from crews.red_team.config import red_team_artifact_name, red_team_artifact_path, red_team_config
+from crews.red_team.fingerprints import detect_web_app_fingerprints, format_web_fingerprint_summary
 from crews.threat_intel.pipeline import (
     RUNS_DIR,
     extract_json_object,
@@ -207,15 +208,17 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 20
 fi
 curl -ksSI --max-time 8 "$BASE" > "$OUT_DIR/{name}_headers.txt" 2>>"$OBS" || true
-curl -ksS --max-time 8 "$BASE" > "$OUT_DIR/{name}_body.html" 2>>"$OBS" || true
+curl -ksSL --max-time 12 "$BASE" > "$OUT_DIR/{name}_body.html" 2>>"$OBS" || true
 curl -ksSI -X OPTIONS --max-time 8 "$BASE" > "$OUT_DIR/{name}_options.txt" 2>>"$OBS" || true
-python3 - "$OUT_DIR/{name}_body.html" "$OBS" <<'PY'
+python3 - "$OUT_DIR/{name}_headers.txt" "$OUT_DIR/{name}_body.html" "$OBS" <<'PY'
 import re, sys
-body_path, obs_path = sys.argv[1:]
+headers_path, body_path, obs_path = sys.argv[1:]
+headers = open(headers_path, encoding="utf-8", errors="replace").read()
 text = open(body_path, encoding="utf-8", errors="replace").read()[:12000]
 title = re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S)
 summary = re.sub(r"\\s+", " ", title.group(1)).strip() if title else "no title"
-open(obs_path, "a", encoding="utf-8").write(f"[enum] title: {{summary}}\\n")
+with open(obs_path, "a", encoding="utf-8") as handle:
+    handle.write(f"[enum] title: {{summary}}\\n")
 PY
 """
             scripts.append(
@@ -228,6 +231,45 @@ PY
                 }
             )
     return scripts[:4]
+
+
+class _NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        return None
+
+
+def _fetch_http_snapshot(url: str, timeout: int = 5, follow_redirects: bool = False) -> dict[str, Any]:
+    request = Request(url, headers={"User-Agent": "stage-red-team/1.0"})
+    opener = build_opener() if follow_redirects else build_opener(_NoRedirectHandler)
+    try:
+        with opener.open(request, timeout=timeout) as response:
+            body = response.read(12000).decode("utf-8", errors="replace")
+            return {
+                "url": response.geturl(),
+                "status": response.status,
+                "headers": dict(response.headers.items()),
+                "body": body,
+                "error": "",
+            }
+    except HTTPError as exc:
+        body = exc.read(12000).decode("utf-8", errors="replace")
+        return {
+            "url": url,
+            "status": exc.code,
+            "headers": dict(exc.headers.items()),
+            "body": body,
+            "error": "",
+        }
+    except (OSError, URLError, TimeoutError) as exc:
+        return {"url": url, "status": 0, "headers": {}, "body": "", "error": str(exc)}
+
+
+def _html_summary(body: str) -> tuple[str, str]:
+    title_match = re.search(r"<title[^>]*>(.*?)</title>", body, flags=re.IGNORECASE | re.DOTALL)
+    title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else ""
+    text = re.sub(r"<[^>]+>", " ", body)
+    text = re.sub(r"\s+", " ", text).strip()[:900]
+    return title or "unknown", text
 
 
 def _write_and_run_post_recon_enum(
@@ -292,19 +334,53 @@ def _write_and_run_post_recon_enum(
 
 def _http_fingerprint(host: str, port: int, scheme: str = "http", timeout: int = 5) -> str:
     url = f"{scheme}://{host}:{port}/"
-    try:
-        request = Request(url, headers={"User-Agent": "stage-red-team/1.0"})
-        context = ssl._create_unverified_context() if scheme == "https" else None
-        with urlopen(request, timeout=timeout, context=context) as response:
-            body = response.read(4096).decode("utf-8", errors="replace")
-            headers = "\n".join(f"{key}: {value}" for key, value in response.headers.items())
-    except (OSError, URLError, TimeoutError):
+    initial = _fetch_http_snapshot(url, timeout=timeout, follow_redirects=False)
+    if initial.get("error"):
         return ""
-    title_match = re.search(r"<title[^>]*>(.*?)</title>", body, flags=re.IGNORECASE | re.DOTALL)
-    title = re.sub(r"\s+", " ", title_match.group(1)).strip() if title_match else ""
-    text = re.sub(r"<[^>]+>", " ", body)
-    text = re.sub(r"\s+", " ", text).strip()[:700]
-    return f"[{url}]\nTitle: {title or 'unknown'}\nHeaders:\n{headers[:700]}\nBody excerpt: {text}"
+
+    snapshots = [initial]
+    location = initial.get("headers", {}).get("Location") or initial.get("headers", {}).get("location")
+    if location:
+        snapshots.append(_fetch_http_snapshot(urljoin(url, str(location)), timeout=timeout, follow_redirects=True))
+    elif not initial.get("body"):
+        snapshots.append(_fetch_http_snapshot(url, timeout=timeout, follow_redirects=True))
+
+    combined_text = "\n".join(
+        "\n".join(f"{key}: {value}" for key, value in snapshot.get("headers", {}).items())
+        + "\n"
+        + str(snapshot.get("body") or "")
+        for snapshot in snapshots
+    )
+    fingerprints = detect_web_app_fingerprints(combined_text)
+    lines = [f"[{url}]"]
+    for index, snapshot in enumerate(snapshots, start=1):
+        title, text = _html_summary(str(snapshot.get("body") or ""))
+        headers = "\n".join(f"{key}: {value}" for key, value in snapshot.get("headers", {}).items())
+        label = "Initial" if index == 1 else "Followed"
+        lines.extend(
+            [
+                f"{label} URL: {snapshot.get('url')}",
+                f"{label} status: {snapshot.get('status')}",
+                f"{label} title: {title}",
+                f"{label} headers:\n{headers[:900]}",
+                f"{label} body excerpt: {text}",
+            ]
+        )
+    lines.append(format_web_fingerprint_summary(fingerprints))
+    return "\n".join(lines)
+
+
+def _scan_web_fingerprints_from_execution(scan: dict[str, Any], execution_dir: Path) -> list[dict[str, Any]]:
+    combined_parts = []
+    for path in sorted(execution_dir.glob("http_enum_*_*.txt")) + sorted(execution_dir.glob("http_enum_*_body.html")):
+        try:
+            combined_parts.append(path.read_text(encoding="utf-8", errors="replace")[:20000])
+        except OSError:
+            continue
+    fingerprints = detect_web_app_fingerprints("\n".join(combined_parts))
+    for fingerprint in fingerprints:
+        fingerprint["source"] = "safe_post_recon_http_enum"
+    return fingerprints
 
 
 def local_http_context(scan: dict[str, Any]) -> str:
@@ -335,7 +411,23 @@ def run_dynamic_red_team_recon_stage(
     retry_context = ""
     for _ in range(2):
         recon_task = create_red_team_recon_tool_generation_task(recon_agent, target, ports, timeout, retry_context)
-        raw_manifest = run_agent_task("red_team_recon_agent", recon_task)
+        try:
+            raw_manifest = run_agent_task("red_team_recon_agent", recon_task)
+        except Exception as exc:
+            raw_manifest = f"Recon LLM unavailable: {exc.__class__.__name__}: {exc}"
+            manifest = {
+                "agent": "red_team_recon_agent",
+                "mode": "local_fallback_no_llm_output",
+                "safety": "LLM recon generation failed; using safe bounded Nmap defaults.",
+                "tool": "nmap",
+                "target": target,
+                "ports": ports,
+                "args": ["-sV", "--version-light", "-Pn", "--open", "-T4"],
+                "timeout_seconds": timeout,
+                "enumeration_tools": [],
+                "raw_output": raw_manifest,
+            }
+            break
         try:
             manifest = extract_json_object(raw_manifest)
         except Exception:
@@ -445,6 +537,9 @@ def run_dynamic_red_team_recon_stage(
             "scripts": enum_scripts,
             "execution_dir": str(execution_dir),
         }
+        web_fingerprints = _scan_web_fingerprints_from_execution(scan, execution_dir)
+        if web_fingerprints:
+            scan["web_fingerprints"] = web_fingerprints
     scan_path.write_text(json.dumps(scan, indent=2), encoding="utf-8")
     execution = {
         "mode": "execute",

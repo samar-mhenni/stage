@@ -7,7 +7,6 @@ from .core import (
     create_prediction_task,
     create_remediation_script_generation_task,
     create_remediation_task,
-    create_reporting_task,
     create_tool_generation_task,
     create_vulnerability_scan_task,
 )
@@ -19,7 +18,6 @@ __all__ = [
     "create_prediction_task",
     "create_remediation_script_generation_task",
     "create_remediation_task",
-    "create_reporting_task",
     "create_tool_generation_task",
     "create_vulnerability_scan_task",
 ]

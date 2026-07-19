@@ -48,6 +48,17 @@ def _read_short_file(path_value: Any, limit: int = 900) -> str:
     return _truncate(redact_sensitive_evidence(path.read_text(encoding="utf-8", errors="replace").strip()), limit)
 
 
+def _read_observation_files(execution_dir: Path, limit: int = 1600) -> str:
+    if not execution_dir.exists():
+        return ""
+    chunks = []
+    for path in sorted(execution_dir.glob("observations*.txt")):
+        text = _read_short_file(path, limit)
+        if text:
+            chunks.append(f"[{path.name}]\n{text}")
+    return _truncate("\n\n".join(chunks), limit)
+
+
 def red_team_execution_status(execution: dict[str, Any] | None) -> str:
     if not execution:
         return "not_executed"
@@ -65,6 +76,23 @@ def red_team_execution_status(execution: dict[str, Any] | None) -> str:
     return "unknown"
 
 
+def _looks_like_negative_confirmation(line: str) -> bool:
+    text = str(line or "").lower()
+    negative_terms = (
+        "no marker",
+        "not found",
+        "not confirmed",
+        "not vulnerable",
+        "failed",
+        "absent",
+        "missing",
+        "did not",
+        "does not",
+        "unable to confirm",
+    )
+    return any(term in text for term in negative_terms)
+
+
 def extract_confirmed_exploits(execution: dict[str, Any] | None) -> list[str]:
     if not execution:
         return []
@@ -74,7 +102,7 @@ def extract_confirmed_exploits(execution: dict[str, Any] | None) -> list[str]:
     return [
         redact_sensitive_evidence(line.strip())
         for line in confirmed_path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
+        if line.strip() and not _looks_like_negative_confirmation(line)
     ]
 
 
@@ -150,7 +178,7 @@ def build_human_execution_summary(execution: dict[str, Any] | None) -> dict[str,
         "dry_run_outputs": dry_run_outputs,
         "confirmed_findings": confirmed_findings,
         "created_credentials": created_credentials,
-        "observations": _read_short_file(execution_dir / "observations.txt", 1600),
+        "observations": _read_observation_files(execution_dir, 1600),
         "script_results": script_results,
     }
 
@@ -178,6 +206,85 @@ def render_human_execution_summary(summary: dict[str, Any]) -> str:
             lines.append(f"  {line}")
     if not summary.get("script_results"):
         lines.append("- No script output available.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _observed_surface_lines(scan: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for host in scan.get("hosts", []):
+        host_id = host.get("host") or scan.get("target") or "unknown-host"
+        for port in host.get("ports", []):
+            if port.get("state") != "open":
+                continue
+            service = " ".join(
+                str(port.get(key) or "").strip()
+                for key in ("service", "product", "version", "extra_info")
+                if port.get(key)
+            ).strip() or "open service"
+            lines.append(f"- `{host_id}:{port.get('port')}/{port.get('protocol', 'tcp')}` {service}")
+    for fingerprint in scan.get("web_fingerprints", []):
+        if not isinstance(fingerprint, dict) or not fingerprint.get("application"):
+            continue
+        versions = ", ".join(str(version) for version in fingerprint.get("versions", []) if version)
+        version_text = f" `{versions}`" if versions else ""
+        confidence = fingerprint.get("confidence", "unknown")
+        lines.append(f"- Web fingerprint: `{fingerprint['application']}`{version_text} confidence `{confidence}`")
+    return lines or ["- No open service evidence was recorded."]
+
+
+def render_red_team_evidence_report(
+    target: str,
+    scan: dict[str, Any],
+    scripts: list[dict[str, Any]],
+    summary: dict[str, Any],
+) -> str:
+    """Render the final red-team report from saved evidence only."""
+    confirmed = summary.get("confirmed_findings") if isinstance(summary.get("confirmed_findings"), list) else []
+    created_credentials = (
+        summary.get("created_credentials") if isinstance(summary.get("created_credentials"), list) else []
+    )
+
+    lines = [
+        f"- Target: `{target}`",
+        f"- Execution status: `{summary.get('status', 'unknown')}`",
+        f"- Confirmed findings: `{len(confirmed)}`",
+        f"- Scripts run: `{summary.get('scripts_ok', 0)}/{summary.get('scripts_total', 0)}`",
+        "",
+        "### Observed Surface",
+        "",
+        *_observed_surface_lines(scan),
+        "",
+        "### Validation Results",
+        "",
+    ]
+    if confirmed:
+        lines.extend(f"- {finding}" for finding in confirmed)
+    else:
+        lines.append("- No exploit was confirmed by the generated validation scripts.")
+
+    if created_credentials:
+        lines.extend(["", "### Created Credentials", ""])
+        lines.extend(f"- {item}" for item in created_credentials)
+
+    if scripts:
+        lines.extend(["", "### Generated Scripts", ""])
+        for script in scripts:
+            lines.append(f"- `{script.get('filename')}`: {script.get('purpose', 'validation script')}")
+
+    observations = str(summary.get("observations") or "").strip()
+    if observations:
+        lines.extend(["", "### Evidence Notes", ""])
+        lines.extend(observations.splitlines()[:10])
+
+    lines.extend(
+        [
+            "",
+            "### Guardrails",
+            "",
+            "- Candidate CVEs and exploit paths are not reported as confirmed unless they appear in confirmed findings.",
+            "- Redirects, HTTP 200/302, product versions, and missing markers are evidence only, not proof of exploitability.",
+        ]
+    )
     return "\n".join(lines).rstrip() + "\n"
 
 

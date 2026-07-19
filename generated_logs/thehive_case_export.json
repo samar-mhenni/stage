@@ -1,0 +1,119 @@
+{
+  "source_tool": "thehive",
+  "export_type": "thehive_case_fixture",
+  "generated_at": "2026-07-13T14:21:00+02:00",
+  "case": {
+    "_id": "case~SOC-JOOMLA-20260713-001",
+    "caseId": 427,
+    "title": "Possible exploitation of Joomla CVE-2023-23752 on lab web application",
+    "description": "Synthetic TheHive case created from Wazuh and web telemetry. Sensitive application configuration values were redacted before case creation.",
+    "severity": 3,
+    "tlp": 2,
+    "pap": 2,
+    "status": "Open",
+    "stage": "Triage",
+    "tags": [
+      "lab",
+      "joomla",
+      "CVE-2023-23752",
+      "T1190",
+      "wazuh"
+    ],
+    "customFields": {
+      "asset_ip": {
+        "string": "172.21.0.3"
+      },
+      "asset_role": {
+        "string": "public-web-application"
+      },
+      "confidence": {
+        "string": "high"
+      },
+      "source_case_id": {
+        "string": "SOC-JOOMLA-20260713-001"
+      }
+    },
+    "createdAt": 1783945260000,
+    "updatedAt": 1783945800000,
+    "createdBy": "soc.analyst@example.invalid"
+  },
+  "observables": [
+    {
+      "dataType": "ip",
+      "data": "172.21.0.3",
+      "message": "Affected Joomla lab host",
+      "tlp": 2,
+      "ioc": false,
+      "tags": [
+        "asset",
+        "destination"
+      ]
+    },
+    {
+      "dataType": "ip",
+      "data": "192.0.2.45",
+      "message": "Synthetic external source observed requesting the vulnerable Joomla API endpoint",
+      "tlp": 2,
+      "ioc": true,
+      "tags": [
+        "source",
+        "scanner"
+      ]
+    },
+    {
+      "dataType": "url",
+      "data": "http://172.21.0.3/api/index.php/v1/config/application?public=true",
+      "message": "Unauthenticated Joomla application configuration endpoint",
+      "tlp": 2,
+      "ioc": true,
+      "tags": [
+        "CVE-2023-23752",
+        "exposure"
+      ]
+    },
+    {
+      "dataType": "other",
+      "data": "CVE-2023-23752",
+      "message": "Joomla improper access control vulnerability referenced by Wazuh vulnerability detector",
+      "tlp": 2,
+      "ioc": true,
+      "tags": [
+        "cve",
+        "joomla"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Validate exposed endpoint",
+      "status": "Completed",
+      "owner": "soc.analyst@example.invalid",
+      "flag": false,
+      "logs": [
+        {
+          "date": 1783945440000,
+          "message": "Endpoint returned Joomla JSON application keys. Secrets were redacted in evidence."
+        }
+      ]
+    },
+    {
+      "title": "Enrich indicators",
+      "status": "InProgress",
+      "owner": "threat.intel@example.invalid",
+      "flag": true,
+      "logs": [
+        {
+          "date": 1783945680000,
+          "message": "Mapped activity to MITRE ATT&CK T1190 and T1592. No real external malicious infrastructure is used in this fixture."
+        }
+      ]
+    },
+    {
+      "title": "Recommend response",
+      "status": "Waiting",
+      "owner": "incident.response@example.invalid",
+      "flag": false,
+      "logs": []
+    }
+  ]
+}

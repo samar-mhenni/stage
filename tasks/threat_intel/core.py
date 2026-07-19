@@ -1,41 +1,49 @@
 from crewai import Task
 
-from tasks.common import CONCISE_LOCAL_FIRST
+from tasks.common import CONCISE_LOCAL_FIRST, none_if_blank, not_provided_if_blank, section
 from tasks.registry import TaskRegistry
+
+
+def _task(agent, description: str, expected_output: str) -> Task:
+    return Task(description=description, expected_output=expected_output, agent=agent)
+
+
+def _local_context(value: str) -> str:
+    return section("Previous/local context", none_if_blank(value))
 
 
 @TaskRegistry.register("collection_task")
 def create_collection_task(agent, target: str, evidence_context: str, local_context: str = "") -> Task:
-    return Task(
-        description=(
+    return _task(
+        agent,
+        (
             f"{CONCISE_LOCAL_FIRST}\n\n"
             "Review the provided tool logs/evidence for this threat-intelligence run. "
             "Do not generate or run collection commands; use only the supplied evidence.\n\n"
-            f"Target/evidence label: {target}\n\n"
-            f"Evidence:\n{evidence_context}\n\n"
-            f"Previous/local context:\n{local_context or 'None.'}\n\n"
+            f"{section('Target/evidence label', target)}\n\n"
+            f"{section('Evidence', evidence_context)}\n\n"
+            f"{_local_context(local_context)}\n\n"
             "Return a compact evidence summary with key hosts, users, alerts, IOCs, vulnerable products, "
             "suspicious behaviors, timestamps, and gaps."
         ),
-        expected_output="Concise summary of the supplied tool logs/evidence.",
-        agent=agent,
+        "Concise summary of the supplied tool logs/evidence.",
     )
 
 
 @TaskRegistry.register("vulnerability_scan_task")
 def create_vulnerability_scan_task(agent, evidence_json: str, local_context: str = "") -> Task:
-    return Task(
-        description=(
+    return _task(
+        agent,
+        (
             f"{CONCISE_LOCAL_FIRST}\n\n"
             "Use the supplied local database enrichment first, then your available knowledge-base/database access only for gaps. "
             "Keep findings tied to explicit evidence: observed service, CVE, IOC, alert, hash, user, host, or timestamp.\n\n"
-            f"Evidence JSON/logs:\n{evidence_json}\n\n"
-            f"Previous/local context:\n{local_context or 'None.'}\n\n"
+            f"{section('Evidence JSON/logs', evidence_json)}\n\n"
+            f"{_local_context(local_context)}\n\n"
             "Return at most 6 findings. For each: host:port or evidence id, risk, why, ATT&CK/detection if known, mitigation. "
             "One line per finding. Do not provide exploit execution steps."
         ),
-        expected_output="At most 6 concise defensive enrichment findings grounded in local/database evidence.",
-        agent=agent,
+        "At most 6 concise defensive enrichment findings grounded in local/database evidence.",
     )
 
 
@@ -53,20 +61,20 @@ def create_correlation_task(
     telemetry_context: str,
     local_context: str = "",
 ) -> Task:
-    return Task(
-        description=(
+    return _task(
+        agent,
+        (
             f"{CONCISE_LOCAL_FIRST}\n\n"
             "Correlate this threat-intelligence evidence into related activity clusters. Use local database enrichment "
             "as supporting context, but keep each cluster grounded in the provided logs/evidence.\n\n"
-            f"Target: {target}\n\n"
-            f"Collection evidence:\n{collection_context}\n\n"
-            f"Enrichment evidence:\n{enrichment_context}\n\n"
-            f"Telemetry and detection evidence:\n{telemetry_context}\n\n"
-            f"Previous/local context:\n{local_context or 'None.'}\n\n"
+            f"{section('Target', target)}\n\n"
+            f"{section('Collection evidence', collection_context)}\n\n"
+            f"{section('Enrichment evidence', enrichment_context)}\n\n"
+            f"{section('Telemetry and detection evidence', telemetry_context)}\n\n"
+            f"{_local_context(local_context)}\n\n"
             "Return at most 4 clusters. Each cluster must be 2 lines: evidence, confidence/gap. Keep defensive."
         ),
-        expected_output="At most 4 concise correlated clusters with confidence and evidence references.",
-        agent=agent,
+        "At most 4 concise correlated clusters with confidence and evidence references.",
     )
 
 
@@ -78,47 +86,19 @@ def create_prediction_task(
     enrichment_context: str,
     local_context: str = "",
 ) -> Task:
-    return Task(
-        description=(
+    return _task(
+        agent,
+        (
             f"{CONCISE_LOCAL_FIRST}\n\n"
             "Predict likely attacker next steps and near-term risk from the correlated evidence.\n\n"
-            f"Target: {target}\n\n"
-            f"Correlation evidence:\n{correlation_context}\n\n"
-            f"Enrichment evidence:\n{enrichment_context}\n\n"
-            f"Previous/local context:\n{local_context or 'None.'}\n\n"
+            f"{section('Target', target)}\n\n"
+            f"{section('Correlation evidence', correlation_context)}\n\n"
+            f"{section('Enrichment evidence', enrichment_context)}\n\n"
+            f"{_local_context(local_context)}\n\n"
             "Return exactly 5 bullets: next step, risk horizon, confidence, watchpoint, preventive control. "
             "Do not include offensive exploitation instructions."
         ),
-        expected_output="Exactly 5 concise defensive prediction bullets.",
-        agent=agent,
-    )
-
-
-@TaskRegistry.register("reporting_task")
-def create_reporting_task(
-    agent,
-    target: str,
-    scan_context: str,
-    vulnerability_context: str,
-    correlation_context: str = "",
-    prediction_context: str = "",
-    local_context: str = "",
-) -> Task:
-    return Task(
-        description=(
-            f"{CONCISE_LOCAL_FIRST}\n\n"
-            "Create a SOC threat-intelligence report from the evidence below. Separate direct evidence from database enrichment and inference.\n\n"
-            f"Target: {target}\n\n"
-            f"Tool/log evidence:\n{scan_context}\n\n"
-            f"Vulnerability scan evidence:\n{vulnerability_context}\n\n"
-            f"Correlation evidence:\n{correlation_context or 'Not provided.'}\n\n"
-            f"Prediction evidence:\n{prediction_context or 'Not provided.'}\n\n"
-            f"Previous/local context:\n{local_context or 'None.'}\n\n"
-            "Return a terse report under 450 words with sections: Summary, Top Risks, Correlation, Prediction, Gaps. "
-            "No repeated raw scan data."
-        ),
-        expected_output="A concise SOC threat-intelligence report under 450 words.",
-        agent=agent,
+        "Exactly 5 concise defensive prediction bullets.",
     )
 
 
@@ -132,20 +112,20 @@ def create_remediation_task(
     prediction_context: str = "",
     local_context: str = "",
 ) -> Task:
-    return Task(
-        description=(
+    return _task(
+        agent,
+        (
             f"{CONCISE_LOCAL_FIRST}\n\n"
             "Create a remediation plan to correct the weaknesses identified in this SOC report. Prefer actions that are directly supported by supplied evidence and generated enrichment.\n\n"
-            f"Target: {target}\n\n"
-            f"Vulnerability evidence:\n{vulnerability_context}\n\n"
-            f"Correlation evidence:\n{correlation_context or 'Not provided.'}\n\n"
-            f"Prediction evidence:\n{prediction_context or 'Not provided.'}\n\n"
-            f"SOC report:\n{report_context}\n\n"
-            f"Previous/local context:\n{local_context or 'None.'}\n\n"
+            f"{section('Target', target)}\n\n"
+            f"{section('Vulnerability evidence', vulnerability_context)}\n\n"
+            f"{section('Correlation evidence', not_provided_if_blank(correlation_context))}\n\n"
+            f"{section('Prediction evidence', not_provided_if_blank(prediction_context))}\n\n"
+            f"{section('SOC report', report_context)}\n\n"
+            f"{_local_context(local_context)}\n\n"
             "Return at most 8 ordered actions. Each action: priority, action, validation. No exploit instructions."
         ),
-        expected_output="At most 8 concise remediation actions with validation checks.",
-        agent=agent,
+        "At most 8 concise remediation actions with validation checks.",
     )
 
 
