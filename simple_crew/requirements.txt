@@ -1,0 +1,8 @@
+crewai[tools]
+chromadb
+sentence-transformers
+python-dotenv
+fastapi
+uvicorn
+pydantic
+
