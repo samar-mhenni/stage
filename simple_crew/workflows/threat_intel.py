@@ -8,6 +8,8 @@ from simple_crew.context_builder import build_planner_context
 from simple_crew.database import search_relevant_context
 from simple_crew.evidence import load_and_normalize
 from simple_crew.models import AgentResult, GeneratedTool, PlannerDecision, WorkflowState
+from simple_crew.notifications import send_confirmed_finding_email
+from simple_crew.remediation import apply_named_ssh_block
 from simple_crew.runtime import ask_planner, run_tool_generator, run_worker, save_state, write_report
 from simple_crew.tasks.threat_intel import TASKS
 from simple_crew.tools.generated_tool_manager import dry_run_tool, save_generated_tool
@@ -107,7 +109,11 @@ def _completed_agents(state: WorkflowState) -> set[str]:
     }
 
 
-def _enforce_required_phase(state: WorkflowState, decision: PlannerDecision) -> PlannerDecision:
+def _enforce_required_phase(
+    state: WorkflowState,
+    decision: PlannerDecision,
+    require_corrective_tool: bool = True,
+) -> PlannerDecision:
     completed = _completed_agents(state)
     for action, aliases, objective in REQUIRED_PHASES:
         if not completed.intersection(aliases):
@@ -122,6 +128,13 @@ def _enforce_required_phase(state: WorkflowState, decision: PlannerDecision) -> 
                 ),
                 expected_output="One structured AgentResult with evidence-supported conclusions.",
             )
+    if not require_corrective_tool:
+        return PlannerDecision(
+            action="finish",
+            objective="Produce the final evidence-backed report",
+            reason="All required analysis and named corrective-action phases are complete.",
+            expected_output="Final report and notification record.",
+        )
     attempts_by_tool = {
         tool.get("tool_id"): [
             item for item in state.execution_results if item.get("tool_id") == tool.get("tool_id")
@@ -219,6 +232,7 @@ def run_threat_intel(
     objective: str,
     max_iterations: int = 12,
     dry_run: bool = True,
+    require_corrective_tool: bool = True,
 ) -> WorkflowState:
     normalized = load_and_normalize(evidence_path)
     state = WorkflowState(
@@ -236,7 +250,7 @@ def run_threat_intel(
             proposed = _dry_decision(state) if dry_run else ask_planner(
                 agents["planner"], context, ACTIONS, TASKS["planner"]
             )
-            decision = _enforce_required_phase(state, proposed)
+            decision = _enforce_required_phase(state, proposed, require_corrective_tool)
             state.planner_decisions.append(decision.model_dump())
             if decision.action == "finish":
                 state.finished = True
@@ -283,9 +297,15 @@ def run_threat_intel(
                     database_context, TASKS[decision.action], {"normalized_evidence": normalized}
                 )
                 state.results.append(result.model_dump())
+                if decision.action == "corrective_actions" and not dry_run:
+                    state.remediation_results.append(
+                        apply_named_ssh_block(result.model_dump())
+                    )
         except Exception as exc:
             state.failed_actions.append({"iteration": state.iteration, "error": str(exc)[:500]})
         finally:
             save_state(state)
     write_report(agents["report"], state, dry_run, TASKS["report"])
+    state.notifications.append(send_confirmed_finding_email(state))
+    save_state(state)
     return state

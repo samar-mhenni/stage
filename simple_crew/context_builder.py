@@ -5,6 +5,19 @@ from simple_crew.config import settings
 from simple_crew.models import WorkflowState
 
 
+def redact_pre_exploitation_context(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not value:
+        return value
+    redacted = json.loads(json.dumps(value))
+    audit = redacted.get("credential_audit")
+    if isinstance(audit, dict) and "passwords" in audit:
+        passwords = audit.get("passwords")
+        audit["passwords"] = [f"<redacted:{len(passwords)} candidates>"] if isinstance(passwords, list) else "<redacted>"
+    if isinstance(audit, dict) and audit.get("password_file"):
+        audit["password_file"] = "<validated dictionary file>"
+    return redacted
+
+
 def _short(value: Any, limit: int = 700) -> Any:
     if isinstance(value, str):
         return value[:limit]
@@ -30,6 +43,10 @@ def build_planner_context(state: WorkflowState, database_context: list[dict[str,
         "target_port": state.target_port,
         "scope": state.authorized_scope,
         "evidence_path": state.evidence_path,
+        "context_path": state.context_path,
+        "pre_exploitation_context": state.pre_exploitation_context,
+        "authorization_matrix": state.authorization_matrix,
+        "authorization_validation": state.authorization_validation,
         "iteration": state.iteration,
         "max_iterations": state.max_iterations,
         "history": history,
@@ -53,46 +70,57 @@ def build_agent_context(
     database_context: list[dict[str, Any]],
 ) -> dict[str, Any]:
     context = build_planner_context(state, database_context)
-    if "medflow" in state.objective.lower() and state.execution_results:
+    if state.pre_exploitation_context and state.execution_results:
         execution = state.execution_results[-1]
         try:
             raw_items = json.loads(execution.get("stdout") or "[]")
         except (TypeError, json.JSONDecodeError):
             raw_items = []
-        compact_evidence = [{
-            "case_id": item.get("case_id"),
-            "method": item.get("method"),
-            "path": item.get("path"),
-            "role": item.get("role"),
-            "request_headers": item.get("request_headers"),
-            "request_body": item.get("request_body"),
-            "status": item.get("status"),
-            "response_body": item.get("response_body"),
-        } for item in raw_items]
-        if "web" in objective.lower() or "get" in objective.lower():
-            compact_evidence = [
-                item for item in compact_evidence
-                if item["method"] == "GET"
-                or (item["path"] == "/patients/1/prescribe" and item["role"] == "patient")
-            ]
-        elif "write" in objective.lower() or "escalation" in objective.lower():
-            compact_evidence = [
-                item for item in compact_evidence
-                if "/prescribe" in str(item["path"]) or item["path"] == "/admin/dashboard"
-            ]
+        if isinstance(raw_items, dict):
+            raw_items = raw_items.get("attempts", [])
+        if not isinstance(raw_items, list):
+            raw_items = []
+        compact_evidence = []
+        for index, item in enumerate(raw_items, 1):
+            if not isinstance(item, dict):
+                continue
+            request_headers = item.get("request_headers") or item.get("request", {}).get("headers") or {}
+            normalized_headers = {str(key).lower(): value for key, value in request_headers.items()}
+            security_headers = {
+                key: value for key, value in normalized_headers.items()
+                if any(marker in key for marker in (
+                    "user", "role", "scope", "tenant", "account", "auth", "token", "cookie"
+                ))
+            }
+            request_body = item.get("request_body") or item.get("request", {}).get("body")
+            response_body = item.get("response_body") or item.get("response", {}).get("body")
+            compact_evidence.append({
+                "case_id": item.get("case_id") or f"attempt-{index}",
+                "test": item.get("test"),
+                "phase": item.get("phase"),
+                "method": item.get("method") or item.get("request", {}).get("method"),
+                "path": item.get("path") or item.get("request", {}).get("url"),
+                "security_headers": security_headers,
+                "request_body": _short(request_body, 120),
+                "status": item.get("status") or item.get("status_code") or item.get("response", {}).get("status_code"),
+                "response_body": _short(response_body, 220),
+            })
+        supplied = redact_pre_exploitation_context(state.pre_exploitation_context)
         context = {
             "workflow": state.workflow_type,
             "objective": state.objective,
             "target": state.target,
             "scope": state.authorized_scope,
-            "authenticated_identity": "x-user-id 301, actual role patient",
-            "attacker_controlled_input": "Every doctor/admin x-user-role value is forged",
-            "verdict_rule": "PASS means attack resisted; FAIL means unauthorized access/write succeeded",
+            "pre_exploitation_context": supplied,
+            "identity": supplied.get("identity"),
+            "verdict_rules": supplied.get("rules"),
+            "authorization_matrix": state.authorization_matrix,
+            "authorization_validation": state.authorization_validation,
             "execution": {
                 key: execution.get(key)
                 for key in ("tool_id", "status", "exit_code", "duration_seconds", "stderr")
             },
-            "medflow_evidence": compact_evidence,
+            "assessment_evidence": compact_evidence,
         }
     context["current_objective"] = objective
     return context

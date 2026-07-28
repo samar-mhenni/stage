@@ -5,6 +5,7 @@ class RedTeamRequest(BaseModel):
     target: str
     target_port: int | None = Field(default=None, ge=1, le=65535)
     authorized_scope: list[str]
+    context_path: str | None = None
     objective: str = "Perform an authorized security assessment of the lab target"
     max_iterations: int = Field(default=12, ge=1, le=20)
     dry_run: bool = True
@@ -22,6 +23,7 @@ class ThreatIntelRequest(BaseModel):
     objective: str = "Analyze suspicious activity and recommend corrective actions"
     max_iterations: int = Field(default=12, ge=1, le=20)
     dry_run: bool = True
+    require_corrective_tool: bool = True
 
 
 class WorkflowResponse(BaseModel):

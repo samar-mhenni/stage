@@ -37,6 +37,11 @@ class ResultItem(BaseModel):
                 item["status"] = str(item["status"])
             if item.get("value") is not None and not isinstance(item["value"], str):
                 item["value"] = json.dumps(item["value"], default=str, separators=(",", ":"))
+            if item.get("reference") is not None and not isinstance(item["reference"], str):
+                if isinstance(item["reference"], list):
+                    item["reference"] = ", ".join(str(entry) for entry in item["reference"])
+                else:
+                    item["reference"] = str(item["reference"])
             allowed = set(cls.model_fields)
             return {key: val for key, val in item.items() if key in allowed}
         return value
@@ -47,6 +52,8 @@ class PlannerDecision(BaseModel):
         "recon",
         "web_analysis",
         "exploit_validation",
+        "authorization_matrix",
+        "credential_audit",
         "process_evidence",
         "analyze_evidence",
         "corrective_actions",
@@ -69,6 +76,10 @@ class WorkflowState(BaseModel):
     target_port: int | None = None
     authorized_scope: list[str] = Field(default_factory=list)
     evidence_path: str | None = None
+    context_path: str | None = None
+    pre_exploitation_context: dict[str, Any] | None = None
+    authorization_matrix: dict[str, Any] | None = None
+    authorization_validation: dict[str, Any] | None = None
     iteration: int = 0
     max_iterations: int = 12
     dry_run: bool = True
@@ -78,6 +89,8 @@ class WorkflowState(BaseModel):
     failed_actions: list[dict[str, Any]] = Field(default_factory=list)
     planner_decisions: list[dict[str, Any]] = Field(default_factory=list)
     database_context: list[dict[str, Any]] = Field(default_factory=list)
+    notifications: list[dict[str, Any]] = Field(default_factory=list)
+    remediation_results: list[dict[str, Any]] = Field(default_factory=list)
     finished: bool = False
     report_path: str | None = None
 
@@ -93,6 +106,40 @@ class GeneratedTool(BaseModel):
     code: str | None = None
     expected_output: str
     risk_level: Literal["low", "medium", "high"] = "low"
+
+
+class AuthorizationRequest(BaseModel):
+    method: str
+    path: str
+    headers: dict[str, str] = Field(default_factory=dict)
+    body: Any | None = None
+
+    @field_validator("method")
+    @classmethod
+    def normalize_method(cls, value: str) -> str:
+        method = value.strip().upper()
+        if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
+            raise ValueError("unsupported HTTP method")
+        return method
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str) -> str:
+        if not value.startswith("/") or "://" in value:
+            raise ValueError("path must be target-relative")
+        return value
+
+
+class AuthorizationTestCase(BaseModel):
+    evidence_id: str
+    test: str
+    request: AuthorizationRequest
+    expected_security_behavior: str
+    cleanup: AuthorizationRequest | None = None
+
+
+class AuthorizationTestMatrix(BaseModel):
+    cases: list[AuthorizationTestCase]
 
 
 class AgentResult(BaseModel):

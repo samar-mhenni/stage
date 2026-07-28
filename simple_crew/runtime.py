@@ -4,9 +4,18 @@ import json
 
 from crewai import Agent
 
-from simple_crew.context_builder import build_agent_context
+from simple_crew.context_builder import (
+    build_agent_context,
+    redact_pre_exploitation_context,
+)
 from simple_crew.database import save_workflow_result
-from simple_crew.models import AgentResult, GeneratedTool, PlannerDecision, WorkflowState
+from simple_crew.models import (
+    AgentResult,
+    AuthorizationTestMatrix,
+    GeneratedTool,
+    PlannerDecision,
+    WorkflowState,
+)
 from simple_crew.tasks.task_runner import run_agent_task
 
 
@@ -56,6 +65,20 @@ def run_tool_generator(
 ) -> GeneratedTool:
     prompt = build_task(objective, context)
     return run_agent_task(agent, prompt, "One GeneratedTool JSON object.", GeneratedTool)
+
+
+def run_authorization_matrix(
+    agent: Agent,
+    context: dict[str, Any],
+    build_task: Callable[[dict[str, Any]], str],
+) -> AuthorizationTestMatrix:
+    prompt = build_task(context)
+    return run_agent_task(
+        agent,
+        prompt,
+        "One AuthorizationTestMatrix JSON object.",
+        AuthorizationTestMatrix,
+    )
 
 
 def _fallback_report(state: WorkflowState) -> str:
@@ -120,21 +143,28 @@ def write_report(
         "generated_tools": state.generated_tools,
         "executions": state.execution_results,
         "failures": state.failed_actions,
+        "remediation_results": state.remediation_results,
         "planner_decisions": state.planner_decisions,
         "database_context": state.database_context,
     }
-    if "medflow" in state.objective.lower() and state.execution_results:
+    if state.pre_exploitation_context and state.execution_results:
         latest = state.execution_results[-1]
         try:
             raw_items = json.loads(latest.get("stdout") or "[]")
         except (TypeError, json.JSONDecodeError):
             raw_items = []
+        if isinstance(raw_items, dict):
+            raw_items = raw_items.get("attempts", [])
+        if not isinstance(raw_items, list):
+            raw_items = []
         summary = {
             "objective": state.objective,
             "target": state.target,
             "scope": state.authorized_scope,
-            "authenticated_identity": "x-user-id 301, actual role patient",
-            "attacker_controlled_input": "doctor/admin x-user-role values are forged",
+            "pre_exploitation_context": redact_pre_exploitation_context(
+                state.pre_exploitation_context
+            ),
+            "authorization_validation": state.authorization_validation,
             "execution": {
                 key: latest.get(key)
                 for key in ("tool_id", "status", "exit_code", "duration_seconds", "stderr")
@@ -143,13 +173,17 @@ def write_report(
                 key: tool.get(key) for key in ("tool_id", "name", "purpose", "filename")
             } for tool in state.generated_tools],
             "raw_evidence_artifact": str(report_dir / f"{state.workflow_id}.json"),
-            "medflow_evidence": [{
+            "assessment_evidence": [{
                 "evidence_id": f"E-{index:03d}",
                 **{
                     key: item.get(key)
-                    for key in ("method", "path", "role", "request_body", "status", "response_body")
+                    for key in (
+                        "test", "phase", "method", "path", "request_headers",
+                        "request_body", "status", "response_headers", "response_body",
+                    )
                 },
-            } for index, item in enumerate(raw_items, 1)],
+                "response_body": str(item.get("response_body") or "")[:220],
+            } for index, item in enumerate(raw_items, 1) if isinstance(item, dict)],
             "analysis_results": [{
                 "agent": item.get("agent"),
                 "status": item.get("status"),
@@ -157,6 +191,7 @@ def write_report(
                 "findings": item.get("findings"),
             } for item in state.results],
             "failures": state.failed_actions,
+            "remediation_results": state.remediation_results,
         }
     if dry_run:
         lines = [

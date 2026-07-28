@@ -19,12 +19,19 @@ Each agent has one file under `agents/red_team/` or `agents/threat_intel/` conta
 
 - Recon Agent
 - Web Agent
+- Web Authorization Testing Agent
 - Exploitation Agent
 - Planner Agent
 - Tool Generator Agent
 - Report Agent
 
 The workflow is limited to explicitly authorized targets. The exploitation agent performs only controlled, least-invasive validation selected by the planner.
+
+When a supplied JSON context contains HTTP endpoints, identity data, and named authorization tests,
+the workflow routes through the Web Authorization Testing Agent. It produces one complete structured
+test matrix. A deterministic validator rejects missing tests, endpoints, roles, resource identifiers,
+or fixed identity headers. Only a validated matrix is converted into one bounded HTTP collector.
+The collector preserves HTTP 4xx responses as evidence instead of treating them as transport failures.
 
 ### Threat Intelligence agents
 
@@ -171,6 +178,71 @@ curl -sS http://127.0.0.1:8010/health
 ```
 
 Reports and compact workflow-result records are written beneath `simple_crew/outputs/`.
+
+## Real-time Wazuh ingestion
+
+Wazuh can push JSON alerts to `POST /threat-intel/ingest/wazuh`. The endpoint requires
+`Authorization: Bearer <WAZUH_INGEST_TOKEN>`, appends every accepted alert to
+`simple_crew/outputs/wazuh_live_alerts.jsonl`, and deterministically correlates failed logins by
+source IP, username, and path. When the configured threshold is reached, it saves an incident
+snapshot but does not start analysis or remediation automatically. Start the complete workflow
+manually with `POST /threat-intel/wazuh/run`; it selects the newest correlated Wazuh incident,
+completes evidence processing, analysis, named corrective actions and guarded remediation, writes
+a report, and emails the report.
+
+```bash
+export WAZUH_INGEST_TOKEN='generate-a-long-random-token'
+export WAZUH_BRUTEFORCE_THRESHOLD=5
+export WAZUH_BRUTEFORCE_WINDOW_SECONDS=30
+export WAZUH_ALERT_COOLDOWN_SECONDS=300
+export WAZUH_LEVEL10_GRACE_SECONDS=2
+venv/bin/uvicorn simple_crew.api.app:app --host 0.0.0.0 --port 8010
+```
+
+Keep port 8010 private and allow only the Wazuh machine. A successful ingestion response reports
+the current correlation count, incident snapshot path, and `start_mode: manual`. Start the newest
+ready incident explicitly:
+
+```bash
+curl -X POST http://127.0.0.1:8010/threat-intel/wazuh/run \
+  -H "Authorization: Bearer $WAZUH_INGEST_TOKEN"
+```
+
+For the authorized SSH lab, the Corrective Actions agent may select the machine-readable action
+`temporary_source_ip_block`. A fixed executor validates the public source IP, trusted-IP exclusions,
+SSH key permissions, protected host, and duration before applying a TCP/22 UFW deny rule. It verifies
+the rule and schedules automatic removal. The LLM never generates firewall source code. Configure
+the `REMEDIATION_*` settings for the protected host and keep its private key outside the project.
+
+## Threat Intel email alerts
+
+After a live Threat Intel run writes its report, it sends an email only when an agent finding is
+explicitly marked `confirmed: true`. Delivery status is stored in the workflow state's
+`notifications` array. Configure SMTP without committing credentials:
+
+```bash
+export EMAIL_ALERTS_ENABLED=true
+export ALERT_EMAIL_TO=samar.mhenni.work@gmail.com
+export SMTP_HOST=smtp.gmail.com
+export SMTP_PORT=587
+export SMTP_USERNAME=your-sender@gmail.com
+export SMTP_PASSWORD=your-google-app-password
+export SMTP_STARTTLS=true
+```
+
+For Gmail, use an App Password rather than the normal account password. Dry runs and workflows
+without an explicitly confirmed finding record a skipped notification and send nothing.
+
+## Bounded HTTP credential audits
+
+An explicitly authorized login audit can be described with
+`simple_crew/samples/http_credential_audit_context.example.json` and supplied through the Red Team
+API's `context_path` field. The workflow requires a target-relative POST path, one or more authorized
+test usernames and either an inline password list or a `password_file` containing one candidate per
+line. Dictionary files must be stored under `simple_crew/samples`. The workflow also requires a
+positive attempt cap, a nonnegative optional delay, and explicit success/failure indicators. It
+executes the supplied credential matrix and stops on the first accepted credential or HTTP 423/429.
+The credential-audit agent is not activated when the context omits `credential_audit.enabled`.
 
 ## Limitations
 

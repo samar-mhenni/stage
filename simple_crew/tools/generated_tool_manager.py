@@ -29,23 +29,17 @@ def _validate_python_evidence_source(source: str, filename: str) -> None:
     calls_main = any(isinstance(func, ast.Name) and func.id == "main" for func in calls)
     if defines_main and not calls_main:
         raise ValueError("generated Python defines main() but never calls it")
-    if "medflow" in filename.lower():
+    if "matrix" in filename.lower():
         lowered = source.lower()
         required = (
-            "x-user-id", "x-user-role", "/patients/1", "/patients",
-            "/admin/dashboard", "/prescribe", "request_headers",
+            "request_headers", "response_headers", "response_body",
+            "status", "method", "path",
         )
         missing = [item for item in required if item not in lowered]
-        missing.extend(
-            role for role in ("patient", "doctor", "admin")
-            if f'"{role}"' not in lowered and f"'{role}'" not in lowered
-        )
         if missing:
             raise ValueError(
-                "MedFlow matrix collector is missing required semantics: " + ", ".join(missing)
+                "matrix collector is missing required evidence semantics: " + ", ".join(missing)
             )
-        if '"x-role"' in lowered or "'x-role'" in lowered:
-            raise ValueError("MedFlow collector must use x-user-role, never x-role")
 
 
 def parse_generated_tool(output: str) -> GeneratedTool:

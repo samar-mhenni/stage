@@ -13,7 +13,8 @@ Rules:
 - If database_context says no exact CVE record exists, do not invent or attribute a CVE mechanism. You may still plan a generic, evidence-driven capability validation based on observed service behavior.
 - For an authorized HTTP lab, a suitable generic validation may use OPTIONS or other observations, then create, verify, and remove one unpredictable harmless text marker. Report only the demonstrated capability, never an unverified CVE.
 - If live_evidence_available is false and the objective requires live target evidence, select generate_tool before recon, web_analysis, or exploit_validation.
-- When the workflow objective is the MedFlow authorization assignment, the first evidence tool must execute the complete requested endpoint/role matrix in one bounded run, emit one JSON document containing every request and response, and restore any temporary prescription markers. Do not decompose that matrix into one tool per endpoint.
+- When pre-exploitation context defines a test matrix, collect it in one bounded run, emit structured
+  request/response evidence, and restore temporary changes. Do not invent missing application facts.
 - After a successful evidence-collection execution, select the appropriate analysis agent before generating a validation tool.
 - Never repeat recon, web_analysis, or exploit_validation when that action already appears in recent results unless a later tool execution supplied new evidence.
 - When an analysis result says live target evidence is missing, select generate_tool for one bounded collection or validation tool instead of repeating the analysis.

@@ -1,5 +1,8 @@
 .env
+.env.local
 **/.env
+**/.env.local
+simple_crew/generated_tools/.redis_lab_password
 venv/
 __pycache__/
 chroma_db/

@@ -25,9 +25,29 @@ class Settings(BaseModel):
     llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "2400"))
     chroma_path: Path = PROJECT_ROOT / os.getenv("CHROMADB_PATH", "./chroma_db")
     max_agent_context_chars: int = int(os.getenv("MAX_AGENT_CONTEXT_CHARS", "10000"))
-    max_tool_output_chars: int = int(os.getenv("MAX_TOOL_OUTPUT_CHARS", "8000"))
+    max_tool_output_chars: int = int(os.getenv("MAX_TOOL_OUTPUT_CHARS", "50000"))
     max_database_results: int = int(os.getenv("MAX_DATABASE_RESULTS", "5"))
     max_history_items: int = int(os.getenv("MAX_HISTORY_ITEMS", "5"))
+    email_alerts_enabled: bool = os.getenv("EMAIL_ALERTS_ENABLED", "").lower() in {"1", "true", "yes"}
+    alert_email_to: str = os.getenv("ALERT_EMAIL_TO", "samar.mhenni.work@gmail.com")
+    smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_username: str = os.getenv("SMTP_USERNAME", "")
+    smtp_password: str = os.getenv("SMTP_PASSWORD", "")
+    smtp_starttls: bool = os.getenv("SMTP_STARTTLS", "true").lower() in {"1", "true", "yes"}
+    wazuh_ingest_token: str = os.getenv("WAZUH_INGEST_TOKEN", "")
+    wazuh_bruteforce_threshold: int = int(os.getenv("WAZUH_BRUTEFORCE_THRESHOLD", "5"))
+    wazuh_bruteforce_window_seconds: int = int(os.getenv("WAZUH_BRUTEFORCE_WINDOW_SECONDS", "30"))
+    wazuh_alert_cooldown_seconds: int = int(os.getenv("WAZUH_ALERT_COOLDOWN_SECONDS", "300"))
+    wazuh_level10_grace_seconds: float = float(os.getenv("WAZUH_LEVEL10_GRACE_SECONDS", "2"))
+    remediation_enabled: bool = os.getenv("REMEDIATION_ENABLED", "true").lower() in {"1", "true", "yes"}
+    remediation_ssh_host: str = os.getenv("REMEDIATION_SSH_HOST", "63.184.123.234")
+    remediation_ssh_user: str = os.getenv("REMEDIATION_SSH_USER", "ubuntu")
+    remediation_ssh_key: Path = Path(os.getenv(
+        "REMEDIATION_SSH_KEY", "/home/samar/.ssh/samar-ec2.pem"
+    ))
+    remediation_block_seconds: int = int(os.getenv("REMEDIATION_BLOCK_SECONDS", "1800"))
+    remediation_trusted_ips: str = os.getenv("REMEDIATION_TRUSTED_IPS", "")
 
 
 settings = Settings()
